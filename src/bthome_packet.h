@@ -1,6 +1,5 @@
 #pragma once
 
-#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 
@@ -111,17 +110,19 @@ private:
             return false;
         }
 
-        BTHome::Measurement *const begin = m_items;
-        BTHome::Measurement *const end = m_items + m_count;
-        BTHome::Measurement *const pos = std::upper_bound(
-            begin, end, m,
-            [](const BTHome::Measurement &lhs, const BTHome::Measurement &rhs)
-            {
-                return lhs.object_id < rhs.object_id;
-            });
+        // Find first slot whose object_id exceeds m's (canonical ascending order).
+        std::size_t pos = 0;
+        while (pos < m_count && m_items[pos].object_id <= m.object_id)
+        {
+            ++pos;
+        }
 
-        std::move_backward(pos, end, end + 1);
-        *pos = m;
+        // Shift the tail up by one, then drop m into place.
+        for (std::size_t k = m_count; k > pos; --k)
+        {
+            m_items[k] = m_items[k - 1];
+        }
+        m_items[pos] = m;
         ++m_count;
         rebuild();
         return true;
