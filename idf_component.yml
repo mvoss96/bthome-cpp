@@ -1,6 +1,8 @@
 version: "0.1.0"
 description: "Dependency-free C++17 BTHome v2 payload builder (header-only)."
 license: "MIT"
+url: "https://github.com/mvoss96/bthome-cpp"
+repository: "https://github.com/mvoss96/bthome-cpp.git"
 
 dependencies:
   idf: ">=4.4"

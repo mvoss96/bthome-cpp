@@ -48,7 +48,7 @@ Example `west.yml` snippet:
 manifest:
     projects:
         - name: bthome-cpp
-            url: https://github.com/<your-org>/bthome-cpp
+            url: https://github.com/mvoss96/bthome-cpp
             revision: main
             path: modules/lib/bthome-cpp
 ```
