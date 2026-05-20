@@ -1,19 +1,31 @@
-// Host-side correctness test. Build & run:
-//   g++ -std=c++17 -fno-exceptions -fno-rtti -Wall -Wextra -I ../src
-//       test_bthome.cpp -o test && ./test
+// Host-side correctness test. Build & run from project root:
+//   g++ -std=c++17 -fno-exceptions -fno-rtti -Wall -Wextra -I .\src .\tests\test_bthome.cpp -o .\build\test_bthome.exe
+//   .\build\test_bthome.exe
 #include "bthome.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 
 static int g_failures = 0;
 
-static void expect_bytes(const char* name, const std::uint8_t* got,
-                         std::size_t got_len, const std::uint8_t* want,
-                         std::size_t want_len) {
-    bool ok = (got_len == want_len) &&
-              (std::memcmp(got, want, want_len) == 0);
+static void expect_true(const char *name, bool cond)
+{
+    std::printf("[%s] %s\n", cond ? "PASS" : "FAIL", name);
+    if (!cond)
+    {
+        ++g_failures;
+    }
+}
+
+static void expect_bytes(const char *name,
+                         const std::uint8_t *got,
+                         std::size_t got_len,
+                         const std::uint8_t *want,
+                         std::size_t want_len)
+{
+    const bool ok = (got_len == want_len) && (std::memcmp(got, want, want_len) == 0);
     std::printf("[%s] %s\n  got : ", ok ? "PASS" : "FAIL", name);
     for (std::size_t i = 0; i < got_len; ++i)
     {
@@ -25,187 +37,405 @@ static void expect_bytes(const char* name, const std::uint8_t* got,
         std::printf("%02X ", want[i]);
     }
     std::printf("\n");
+
     if (!ok)
     {
         ++g_failures;
     }
 }
 
-static void expect_true(const char* name, bool cond) {
-    std::printf("[%s] %s\n", cond ? "PASS" : "FAIL", name);
-    if (!cond)
-    {
-        ++g_failures;
-    }
-}
-
-int main() {
-    // 1. The README/success-metric example. Added out of canonical order to
-    //    prove the library reorders to ascending object id.
-    {
-        BTHomePacket<31> p;
-        bool a = p.add(BTHome::humidity(54.2f));
-        bool b = p.add(BTHome::temperature(21.53f));
-        bool c = p.add(BTHome::battery(87));
-        // temp 21.53/0.01=2153=0x0869 -> 69 08 ; hum 54.2/0.01=5420=0x152C -> 2C 15
-        // ordering: battery(01) temp(02) hum(03)
-        const std::uint8_t want[] = {
-            0x0C, 0x16, 0xD2, 0xFC, 0x40,
-            0x01, 0x57,
-            0x02, 0x69, 0x08,
-            0x03, 0x2C, 0x15,
-        };
-        expect_bytes("full AD element, reordered", p.data(), p.size(),
-                     want, sizeof(want));
-        const std::uint8_t want_sd[] = {
-            0xD2, 0xFC, 0x40,
-            0x01, 0x57, 0x02, 0x69, 0x08, 0x03, 0x2C, 0x15,
-        };
-        expect_bytes("serviceData() value", p.serviceData(),
-                     p.serviceDataSize(), want_sd, sizeof(want_sd));
-        expect_true("all adds fit", a && b && c);
-    }
-
-    // 2. Empty packet is still a valid (header-only) BTHome element.
+static void test_header_and_basic_packet()
+{
+    // Tests: Empty packet without measurements.
+    // Expects: Exact header AD block [04 16 D2 FC 40] and serviceDataSize = size-2.
     {
         BTHomePacket<31> p;
         const std::uint8_t want[] = {0x04, 0x16, 0xD2, 0xFC, 0x40};
-        expect_bytes("empty packet header", p.data(), p.size(), want,
-                     sizeof(want));
+        expect_bytes("header-only packet", p.data(), p.size(), want, sizeof(want));
+        expect_true("serviceDataSize == size - 2", p.serviceDataSize() == (p.size() - 2));
     }
 
-    // 3. Flags: trigger-based + encrypted set the device-info bits.
+    // Tests: Mixed measurements inserted in intentionally unsorted order.
+    // Expects: Serialization sorted by object_id and exact match with known byte vector.
     {
         BTHomePacket<31> p;
-        p.setTriggerBased(true);
-        p.setEncrypted(true);
-        expect_true("device-info 0x45", p.serviceData()[2] == 0x45);
-    }
+        const bool a = p.add(BTHome::humidity(54.2f));
+        const bool b = p.add(BTHome::temperature(21.53f));
+        const bool c = p.add(BTHome::battery(87));
 
-    // 4. Signed/negative temperature encodes two's complement little-endian.
-    {
-        BTHomePacket<31> p;
-        p.add(BTHome::temperature(-12.34f));  // -1234 = 0xFB2E -> 2E FB
-        const std::uint8_t want_sd[] = {0xD2, 0xFC, 0x40, 0x02, 0x2E, 0xFB};
-        expect_bytes("negative temperature", p.serviceData(),
-                     p.serviceDataSize(), want_sd, sizeof(want_sd));
-    }
+        const std::uint8_t want_ad[] = {
+            0x0C,
+            0x16,
+            0xD2,
+            0xFC,
+            0x40,
+            0x01,
+            0x57,
+            0x02,
+            0x69,
+            0x08,
+            0x03,
+            0x2C,
+            0x15,
+        };
+        expect_bytes("mixed measurements sorted by object-id", p.data(), p.size(), want_ad, sizeof(want_ad));
 
-    // 5. uint24 pressure.
-    {
-        BTHomePacket<31> p;
-        p.add(BTHome::pressure(1013.25f));  // /0.01 = 101325 = 0x018BCD -> CD 8B 01
-        const std::uint8_t want_sd[] = {0xD2, 0xFC, 0x40, 0x04, 0xCD, 0x8B, 0x01};
-        expect_bytes("uint24 pressure", p.serviceData(), p.serviceDataSize(),
-                     want_sd, sizeof(want_sd));
+        const std::uint8_t want_sd[] = {
+            0xD2,
+            0xFC,
+            0x40,
+            0x01,
+            0x57,
+            0x02,
+            0x69,
+            0x08,
+            0x03,
+            0x2C,
+            0x15,
+        };
+        expect_bytes("serviceData bytes", p.serviceData(), p.serviceDataSize(), want_sd, sizeof(want_sd));
+        expect_true("all mixed adds succeeded", a && b && c);
     }
+}
 
-    // 6. Multiple same-type entries keep insertion order for equal object-id.
+static void test_device_info_flags()
+{
+    // Tests: Setting device-info bits for trigger-based and encrypted.
+    // Expects: Device-info byte is 0x45 (version 2 + trigger bit + encrypted bit).
+    BTHomePacket<31> p;
+    p.setTriggerBased(true);
+    p.setEncrypted(true);
+    expect_true("device-info encrypted+trigger bitmask", p.serviceData()[2] == 0x45);
+}
+
+static void test_ordering_and_ids()
+{
+    // Tests: Two measurements with identical object_id (temperature).
+    // Expects: Stable ordering preserved in insertion order (18.2 before 21.5).
     {
         BTHomePacket<31> p;
         p.add(BTHome::temperature(18.2f));
         p.add(BTHome::temperature(21.5f));
-        // insertion order for equal object id is preserved (upper_bound)
-        // 18.2 -> 1820 = 0x071C -> 1C 07 (first)
-        // 21.5 -> 2150 = 0x0866 -> 66 08 (second)
+
         const std::uint8_t want_sd[] = {
-            0xD2, 0xFC, 0x40,
-            0x02, 0x1C, 0x07,
-            0x02, 0x66, 0x08,
+            0xD2,
+            0xFC,
+            0x40,
+            0x02,
+            0x1C,
+            0x07,
+            0x02,
+            0x66,
+            0x08,
         };
-        expect_bytes("two temperatures same object id", p.serviceData(),
-                     p.serviceDataSize(), want_sd, sizeof(want_sd));
+        expect_bytes("stable order for equal object-id", p.serviceData(), p.serviceDataSize(), want_sd, sizeof(want_sd));
     }
 
-    // 7. Binary sensors encode a single 0/1 byte and must use spec IDs.
+    // Tests: packet_id (0x00) together with a sensor value.
+    // Expects: packet_id is serialized before Temperature.
+    {
+        BTHomePacket<31> p;
+        p.add(BTHome::temperature(20.0f));
+        p.add(BTHome::packet_id(7));
+
+        const std::uint8_t want_sd[] = {
+            0xD2,
+            0xFC,
+            0x40,
+            0x00,
+            0x07,
+            0x02,
+            0xD0,
+            0x07,
+        };
+        expect_bytes("packet_id sorts first", p.serviceData(), p.serviceDataSize(), want_sd, sizeof(want_sd));
+    }
+
+    // Tests: Mapping of binary IDs motion/window according to the BTHome table.
+    // Expects: motion=0x21 and window=0x2D with bool payload 0x01/0x00.
     {
         BTHomePacket<31> p;
         p.add(BTHome::motion(true));
         p.add(BTHome::window(false));
-        // BTHome v2 spec: motion=0x21, window=0x2D
         const std::uint8_t want_sd[] = {0xD2, 0xFC, 0x40, 0x21, 0x01, 0x2D, 0x00};
-        expect_bytes("binary sensors", p.serviceData(), p.serviceDataSize(),
-                     want_sd, sizeof(want_sd));
+        expect_bytes("binary ids motion/window", p.serviceData(), p.serviceDataSize(), want_sd, sizeof(want_sd));
     }
 
-    // 8. Additional binary ID conformance checks against BTHome v2 table.
     {
+        // Tests: Mapping of binary IDs heat/lock according to the BTHome table.
+        // Expects: heat=0x1D and lock=0x1F with correct bool payload bytes.
         BTHomePacket<31> p;
         p.add(BTHome::heat(true));
         p.add(BTHome::lock(false));
-        // BTHome v2 spec: heat=0x1D, lock=0x1F
         const std::uint8_t want_sd[] = {0xD2, 0xFC, 0x40, 0x1D, 0x01, 0x1F, 0x00};
-        expect_bytes("binary heat/lock IDs", p.serviceData(), p.serviceDataSize(),
-                     want_sd, sizeof(want_sd));
+        expect_bytes("binary ids heat/lock", p.serviceData(), p.serviceDataSize(), want_sd, sizeof(want_sd));
     }
 
-    // 9. Distinct IDs near 0x2D/0x2E boundary (window vs humidity_u8).
     {
+        // Tests: Boundary area of adjacent IDs 0x2D (window) and 0x2E (humidity_u8).
+        // Expects: No ID mix-up, exactly [2D 00 2E 23] in the payload section.
         BTHomePacket<31> p;
         p.add(BTHome::window(false));
         p.add(BTHome::humidity_u8(35));
-        // BTHome v2 spec: window=0x2D, humidity_u8=0x2E
         const std::uint8_t want_sd[] = {0xD2, 0xFC, 0x40, 0x2D, 0x00, 0x2E, 0x23};
-        expect_bytes("window vs humidity_u8 IDs", p.serviceData(),
-                     p.serviceDataSize(), want_sd, sizeof(want_sd));
+        expect_bytes("window (0x2D) vs humidity_u8 (0x2E)", p.serviceData(), p.serviceDataSize(), want_sd, sizeof(want_sd));
     }
+}
 
-    // 10. Overflow is reported, not crashed. Tiny capacity holds header + one
-    //    2-byte measurement (battery) but not a second.
-    {
-        BTHomePacket<8> p;  // 5 header + room for one id+1 value
-        bool a = p.add(BTHome::battery(50));
-        bool b = p.add(BTHome::humidity(40.0f));  // would need 3 bytes -> drop
-        expect_true("first add fit", a);
-        expect_true("second add failed", !b);
-    }
-
-    // 11. New fixed-width uint32 scaled sensor (energy_u32).
+static void test_numeric_encoding_paths()
+{
+    // Tests: Signed temperature encoding with a negative value.
+    // Expects: Two's-complement little-endian, -12.34 -> [2E FB].
     {
         BTHomePacket<31> p;
-        p.add(BTHome::energy_u32(12.345f));  // /0.001 => 12345 => 0x00003039 => 39 30 00 00
+        p.add(BTHome::temperature(-12.34f));
+        const std::uint8_t want_sd[] = {0xD2, 0xFC, 0x40, 0x02, 0x2E, 0xFB};
+        expect_bytes("negative temperature encoding", p.serviceData(), p.serviceDataSize(), want_sd, sizeof(want_sd));
+    }
+
+    // Tests: Unsigned 24-bit path for pressure.
+    // Expects: 1013.25 hPa -> raw 101325 -> [CD 8B 01].
+    {
+        BTHomePacket<31> p;
+        p.add(BTHome::pressure(1013.25f));
+        const std::uint8_t want_sd[] = {0xD2, 0xFC, 0x40, 0x04, 0xCD, 0x8B, 0x01};
+        expect_bytes("pressure uint24 encoding", p.serviceData(), p.serviceDataSize(), want_sd, sizeof(want_sd));
+    }
+
+    // Tests: Unsigned 32-bit scaling path for energy_u32.
+    // Expects: 12.345 -> raw 12345 -> [39 30 00 00].
+    {
+        BTHomePacket<31> p;
+        p.add(BTHome::energy_u32(12.345f));
         const std::uint8_t want_sd[] = {0xD2, 0xFC, 0x40, 0x4D, 0x39, 0x30, 0x00, 0x00};
-        expect_bytes("energy_u32 scaled", p.serviceData(), p.serviceDataSize(),
-                     want_sd, sizeof(want_sd));
+        expect_bytes("energy_u32 scaled", p.serviceData(), p.serviceDataSize(), want_sd, sizeof(want_sd));
     }
 
-    // 12. New signed integer wrapper path (count_s16).
+    // Tests: Signed integer wrapper count_s16.
+    // Expects: -22 encoded as int16 little-endian [EA FF].
     {
         BTHomePacket<31> p;
-        p.add(BTHome::count_s16(-22));  // -22 => 0xFFEA => EA FF
+        p.add(BTHome::count_s16(-22));
         const std::uint8_t want_sd[] = {0xD2, 0xFC, 0x40, 0x5A, 0xEA, 0xFF};
-        expect_bytes("count_s16 signed", p.serviceData(), p.serviceDataSize(),
-                     want_sd, sizeof(want_sd));
+        expect_bytes("count_s16 signed wrapper", p.serviceData(), p.serviceDataSize(), want_sd, sizeof(want_sd));
     }
 
-    // 13. Timestamp uses raw uint32 epoch seconds.
+    // Tests: Raw u32 path for timestamp without scaling.
+    // Expects: epoch 1684093277 -> [5D 39 61 64] little-endian.
     {
         BTHomePacket<31> p;
-        p.add(BTHome::timestamp(1684093277u));  // 0x6461395D => 5D 39 61 64
+        p.add(BTHome::timestamp(1684093277u));
         const std::uint8_t want_sd[] = {0xD2, 0xFC, 0x40, 0x50, 0x5D, 0x39, 0x61, 0x64};
-        expect_bytes("timestamp uint32", p.serviceData(), p.serviceDataSize(),
-                     want_sd, sizeof(want_sd));
+        expect_bytes("timestamp uint32", p.serviceData(), p.serviceDataSize(), want_sd, sizeof(want_sd));
+    }
+}
+
+static void test_rounding_and_clamping()
+{
+    // Tests: "Half away from zero" rounding for signed scaled values.
+    // Expects: +1.235 -> +124 ([7C 00]) and -1.235 -> -124 ([84 FF]).
+    {
+        BTHomePacket<31> p;
+        p.add(BTHome::temperature(1.235f)); // 123.5 -> 124 -> 0x007C
+        p.add(BTHome::dewpoint(-1.235f));   // -123.5 -> -124 -> 0xFF84
+
+        const std::uint8_t want_sd[] = {
+            0xD2,
+            0xFC,
+            0x40,
+            0x02,
+            0x7C,
+            0x00,
+            0x08,
+            0x84,
+            0xFF,
+        };
+        expect_bytes("rounding half away from zero", p.serviceData(), p.serviceDataSize(), want_sd, sizeof(want_sd));
     }
 
-    // 14. BTHome-specific raw advertising payload:
-    //     Flags + BTHome Service Data.
+    // Tests: Signed clamping for 2-byte temperature outside representable range.
+    // Expects: +500.0 -> max int16 ([FF 7F]) and -500.0 -> min int16 ([00 80]).
+    {
+        BTHomePacket<31> p;
+        p.add(BTHome::temperature(500.0f));
+        p.add(BTHome::dewpoint(-500.0f));
+
+        const std::uint8_t want_sd[] = {
+            0xD2,
+            0xFC,
+            0x40,
+            0x02,
+            0xFF,
+            0x7F,
+            0x08,
+            0x00,
+            0x80,
+        };
+        expect_bytes("signed clamp to int16 range", p.serviceData(), p.serviceDataSize(), want_sd, sizeof(want_sd));
+    }
+
+    // Tests: Unsigned clamping for underflow and overflow.
+    // Expects: humidity(-3.0) -> [00 00] and pressure(200000.0) -> [FF FF FF].
+    {
+        BTHomePacket<31> p;
+        p.add(BTHome::humidity(-3.0f));     // unsigned 2-byte scaled -> clamp to 0
+        p.add(BTHome::pressure(200000.0f)); // unsigned 3-byte scaled -> clamp to 0xFFFFFF
+
+        const std::uint8_t want_sd[] = {
+            0xD2,
+            0xFC,
+            0x40,
+            0x03,
+            0x00,
+            0x00,
+            0x04,
+            0xFF,
+            0xFF,
+            0xFF,
+        };
+        expect_bytes("unsigned clamp floor/ceiling", p.serviceData(), p.serviceDataSize(), want_sd, sizeof(want_sd));
+    }
+}
+
+static void test_capacity_and_overflow_behavior()
+{
+    // Tests: Capacity limit of a very small packet with a follow-up add.
+    // Expects: First add succeeds, second add is rejected, packet stays valid and unchanged.
+    {
+        BTHomePacket<8> p;
+        const bool first_ok = p.add(BTHome::battery(50));
+        const bool second_ok = p.add(BTHome::humidity(40.0f));
+
+        expect_true("tiny packet first add ok", first_ok);
+        expect_true("tiny packet second add rejected", !second_ok);
+
+        const std::uint8_t want_ad[] = {0x06, 0x16, 0xD2, 0xFC, 0x40, 0x01, 0x32};
+        expect_bytes("tiny packet remains valid after rejection", p.data(), p.size(), want_ad, sizeof(want_ad));
+    }
+}
+
+static void test_advertising_builder()
+{
+    // Tests: Basic advertising build without local name.
+    // Expects: Flags AD + BTHome service-data AD in exactly this order.
     {
         BTHomePacket<31> p;
         p.add(BTHome::battery(87));
 
         std::uint8_t adv[31] = {};
-        int adv_size = build_bthome_advertising(p, adv, sizeof(adv));
-        expect_true("adv build flags + bthome", adv_size >= 0);
+        const int adv_size = build_bthome_advertising(p, adv, sizeof(adv));
+        expect_true("adv basic build success", adv_size >= 0);
 
         const std::uint8_t want[] = {
-            0x02, 0x01, 0x06,
-            0x06, 0x16, 0xD2, 0xFC, 0x40, 0x01, 0x57,
+            0x02,
+            0x01,
+            0x06,
+            0x06,
+            0x16,
+            0xD2,
+            0xFC,
+            0x40,
+            0x01,
+            0x57,
         };
-        expect_bytes("bthome raw advertising payload",
-                     adv, static_cast<std::size_t>(adv_size), want, sizeof(want));
+        expect_bytes("adv basic payload", adv, static_cast<std::size_t>(adv_size), want, sizeof(want));
     }
 
-    std::printf("\n%s\n", g_failures == 0 ? "ALL TESTS PASSED"
-                                          : "SOME TESTS FAILED");
+    // Tests: Advertising with complete local name (AD type 0x09).
+    // Expects: Correctly appends [len 0x09 'node'] after the BTHome block.
+    {
+        BTHomePacket<31> p;
+        p.add(BTHome::battery(87));
+
+        std::uint8_t adv[31] = {};
+        const int adv_size = build_bthome_advertising(p, adv, sizeof(adv), "node", true);
+        expect_true("adv with complete local name", adv_size >= 0);
+
+        const std::uint8_t want[] = {
+            0x02,
+            0x01,
+            0x06,
+            0x06,
+            0x16,
+            0xD2,
+            0xFC,
+            0x40,
+            0x01,
+            0x57,
+            0x05,
+            0x09,
+            'n',
+            'o',
+            'd',
+            'e',
+        };
+        expect_bytes("adv local name complete", adv, static_cast<std::size_t>(adv_size), want, sizeof(want));
+    }
+
+    // Tests: Advertising with shortened local name (AD type 0x08).
+    // Expects: Correctly appends [len 0x08 'nd'] after the BTHome block.
+    {
+        BTHomePacket<31> p;
+        p.add(BTHome::battery(87));
+
+        std::uint8_t adv[31] = {};
+        const int adv_size = build_bthome_advertising(p, adv, sizeof(adv), "nd", false);
+        expect_true("adv with shortened local name", adv_size >= 0);
+
+        const std::uint8_t want[] = {
+            0x02,
+            0x01,
+            0x06,
+            0x06,
+            0x16,
+            0xD2,
+            0xFC,
+            0x40,
+            0x01,
+            0x57,
+            0x03,
+            0x08,
+            'n',
+            'd',
+        };
+        expect_bytes("adv local name shortened", adv, static_cast<std::size_t>(adv_size), want, sizeof(want));
+    }
+
+    // Tests: Error paths of the advertising builder.
+    // Expects: Returns -1 for too-small output buffer, nullptr output, and too-long name (>254).
+    {
+        BTHomePacket<31> p;
+        p.add(BTHome::battery(87));
+
+        std::uint8_t adv_small[9] = {};
+        expect_true("adv fails on too-small output buffer",
+                    build_bthome_advertising(p, adv_small, sizeof(adv_small)) == -1);
+
+        expect_true("adv fails on null output pointer",
+                    build_bthome_advertising(p, nullptr, 31) == -1);
+
+        char long_name[256] = {};
+        for (std::size_t i = 0; i < 255; ++i)
+        {
+            long_name[i] = 'A';
+        }
+        long_name[255] = '\0';
+        std::uint8_t adv[300] = {};
+        expect_true("adv rejects local name > 254 bytes",
+                    build_bthome_advertising(p, adv, sizeof(adv), long_name, true) == -1);
+    }
+}
+
+int main()
+{
+    test_header_and_basic_packet();
+    test_device_info_flags();
+    test_ordering_and_ids();
+    test_numeric_encoding_paths();
+    test_rounding_and_clamping();
+    test_capacity_and_overflow_behavior();
+    test_advertising_builder();
+
+    std::printf("\n%s\n", g_failures == 0 ? "ALL TESTS PASSED" : "SOME TESTS FAILED");
     return g_failures == 0 ? 0 : 1;
 }
