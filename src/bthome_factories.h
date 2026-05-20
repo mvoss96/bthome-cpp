@@ -68,6 +68,11 @@ namespace BTHome
     inline Measurement light_level(std::uint8_t v) { return detail::u8(SensorObjectId::LightLevel, v); }
     inline Measurement settings_revision(std::uint8_t v) { return detail::u8(SensorObjectId::SettingsRevision, v); }
 
+    // Device objects
+    inline Measurement device_type_id(std::uint16_t v) { return detail::u16(DeviceObjectId::DeviceTypeId, v); }
+    inline Measurement firmware_version_u32(std::uint32_t v) { return detail::u32(DeviceObjectId::FirmwareVersionU32, v); }
+    inline Measurement firmware_version_u24(std::uint32_t v) { return detail::make_u(static_cast<std::uint8_t>(DeviceObjectId::FirmwareVersionU24), v, 3); }
+
     // Binary sensors
     inline Measurement generic_boolean(bool on) { return detail::b(BinaryObjectId::GenericBoolean, on); }
     inline Measurement power_state(bool on) { return detail::b(BinaryObjectId::PowerState, on); }

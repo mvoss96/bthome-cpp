@@ -230,6 +230,36 @@ static void test_numeric_encoding_paths()
     }
 }
 
+static void test_device_object_paths()
+{
+    // Tests: Device type id object 0xF0 with uint16 payload.
+    // Expects: F0 + little-endian 0x0001 -> [F0 01 00].
+    {
+        BTHomePacket<31> p;
+        p.add(BTHome::device_type_id(1));
+        const std::uint8_t want_sd[] = {0xD2, 0xFC, 0x40, 0xF0, 0x01, 0x00};
+        expect_bytes("device type id u16", p.serviceData(), p.serviceDataSize(), want_sd, sizeof(want_sd));
+    }
+
+    // Tests: Firmware version object 0xF1 with uint32 payload.
+    // Expects: 4.2.1.0 packed as 0x04020100 -> [F1 00 01 02 04].
+    {
+        BTHomePacket<31> p;
+        p.add(BTHome::firmware_version_u32(0x04020100u));
+        const std::uint8_t want_sd[] = {0xD2, 0xFC, 0x40, 0xF1, 0x00, 0x01, 0x02, 0x04};
+        expect_bytes("firmware version u32", p.serviceData(), p.serviceDataSize(), want_sd, sizeof(want_sd));
+    }
+
+    // Tests: Firmware version object 0xF2 with uint24 payload.
+    // Expects: 6.1.0 packed as 0x060100 -> [F2 00 01 06].
+    {
+        BTHomePacket<31> p;
+        p.add(BTHome::firmware_version_u24(0x060100u));
+        const std::uint8_t want_sd[] = {0xD2, 0xFC, 0x40, 0xF2, 0x00, 0x01, 0x06};
+        expect_bytes("firmware version u24", p.serviceData(), p.serviceDataSize(), want_sd, sizeof(want_sd));
+    }
+}
+
 static void test_rounding_and_clamping()
 {
     // Tests: "Half away from zero" rounding for signed scaled values.
@@ -432,6 +462,7 @@ int main()
     test_device_info_flags();
     test_ordering_and_ids();
     test_numeric_encoding_paths();
+    test_device_object_paths();
     test_rounding_and_clamping();
     test_capacity_and_overflow_behavior();
     test_advertising_builder();
