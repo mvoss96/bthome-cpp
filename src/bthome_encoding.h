@@ -1,7 +1,6 @@
 #pragma once
 
 #include <cstdint>
-#include <type_traits>
 
 #include "bthome_defs.h"
 
@@ -235,7 +234,6 @@ namespace BTHome
         template <typename ObjectId>
         inline Measurement u8(ObjectId id, std::uint64_t raw)
         {
-            static_assert(std::is_enum<ObjectId>::value, "u8 expects an enum object ID type.");
             return make_u(static_cast<std::uint8_t>(id), raw, 1);
         }
 
@@ -249,7 +247,6 @@ namespace BTHome
         template <typename ObjectId>
         inline Measurement u16(ObjectId id, std::uint64_t raw)
         {
-            static_assert(std::is_enum<ObjectId>::value, "u16 expects an enum object ID type.");
             return make_u(static_cast<std::uint8_t>(id), raw, 2);
         }
 
@@ -263,7 +260,6 @@ namespace BTHome
         template <typename ObjectId>
         inline Measurement u32(ObjectId id, std::uint64_t raw)
         {
-            static_assert(std::is_enum<ObjectId>::value, "u32 expects an enum object ID type.");
             return make_u(static_cast<std::uint8_t>(id), raw, 4);
         }
 
@@ -277,7 +273,6 @@ namespace BTHome
         template <typename ObjectId>
         inline Measurement i8(ObjectId id, std::int64_t raw)
         {
-            static_assert(std::is_enum<ObjectId>::value, "i8 expects an enum object ID type.");
             return make_s(static_cast<std::uint8_t>(id), raw, 1);
         }
 
@@ -291,7 +286,6 @@ namespace BTHome
         template <typename ObjectId>
         inline Measurement i16(ObjectId id, std::int64_t raw)
         {
-            static_assert(std::is_enum<ObjectId>::value, "i16 expects an enum object ID type.");
             return make_s(static_cast<std::uint8_t>(id), raw, 2);
         }
 
@@ -305,7 +299,6 @@ namespace BTHome
         template <typename ObjectId>
         inline Measurement i32(ObjectId id, std::int64_t raw)
         {
-            static_assert(std::is_enum<ObjectId>::value, "i32 expects an enum object ID type.");
             return make_s(static_cast<std::uint8_t>(id), raw, 4);
         }
 
@@ -319,7 +312,6 @@ namespace BTHome
         template <typename ObjectId>
         inline Measurement b(ObjectId id, bool on)
         {
-            static_assert(std::is_enum<ObjectId>::value, "b expects an enum object ID type.");
             Measurement m;
             m.object_id = static_cast<std::uint8_t>(id);
             m.len = 1;
