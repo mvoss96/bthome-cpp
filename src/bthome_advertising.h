@@ -2,7 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
+#include <string.h>
 
 #include "bthome_packet.h"
 
@@ -29,7 +29,7 @@ int build_bthome_advertising(const BTHomePacket<PacketCapacity> &packet,
         return -1;
     }
 
-    const std::size_t local_name_len = (local_name != nullptr) ? std::strlen(local_name) : 0;
+    const std::size_t local_name_len = (local_name != nullptr) ? strlen(local_name) : 0;
     if (local_name_len > 0xFE)
     {
         return -1;
@@ -46,14 +46,14 @@ int build_bthome_advertising(const BTHomePacket<PacketCapacity> &packet,
     out[2] = 0x06; // Flags value: LE General Discoverable Mode, BR/EDR Not Supported
 
     // Copy full BTHome service-data AD element directly after Flags AD.
-    std::memcpy(out + kFlagsBytes, packet.data(), packet.size());
+    memcpy(out + kFlagsBytes, packet.data(), packet.size());
 
     std::size_t p = kFlagsBytes + packet.size();
     if (local_name_len > 0)
     {
         out[p++] = static_cast<std::uint8_t>(1 + local_name_len); // length of Local Name AD
         out[p++] = complete_local_name ? 0x09 : 0x08;             // AD type: Complete or Shortened Local Name
-        std::memcpy(out + p, local_name, local_name_len);         // Copy local name
+        memcpy(out + p, local_name, local_name_len);              // Copy local name
         p += local_name_len;
     }
 
