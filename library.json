@@ -1,0 +1,16 @@
+{
+  "name": "bthome-cpp",
+  "version": "0.1.0",
+  "description": "Dependency-free C++17 BTHome v2 advertisement payload builder. No heap, no exceptions, no RTTI. Builds the service-data bytes only; pair with any BLE stack (NimBLE, Bluedroid, Zephyr Bluetooth, ArduinoBLE).",
+  "keywords": "bthome, ble, bluetooth, advertisement, esp32, zephyr, arduino, sensor",
+  "license": "MIT",
+  "frameworks": "*",
+  "platforms": "*",
+  "headers": "bthome.h",
+  "build": {
+    "includeDir": "src"
+  },
+  "export": {
+    "include": ["src", "examples", "tests", "CMakeLists.txt"]
+  }
+}

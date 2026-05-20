@@ -1,0 +1,38 @@
+# Build output directories
+build/
+out/
+
+# CMake generated files
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+CTestTestfile.cmake
+compile_commands.json
+Testing/
+
+# Generated make/ninja files
+Makefile
+build.ninja
+.ninja_deps
+.ninja_log
+
+# Compiled objects and binaries
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.dll
+*.dylib
+*.exe
+
+# Debug symbols and maps
+*.pdb
+*.dSYM/
+*.map
+
+# Coverage and profiling
+*.gcda
+*.gcno
+*.profraw
+*.profdata
