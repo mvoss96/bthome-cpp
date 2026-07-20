@@ -456,6 +456,142 @@ static void test_advertising_builder()
     }
 }
 
+static void test_insert_positions()
+{
+    // Tests: Insertions that land at the front, middle and end of the sorted
+    // payload, in an order that exercises each position.
+    // Expects: Final serialization strictly sorted regardless of add order.
+    {
+        BTHomePacket<31> p;
+        p.add(BTHome::timestamp(0x64613955u)); // 0x50 - becomes the tail
+        p.add(BTHome::battery(87));            // 0x01 - insert at front
+        p.add(BTHome::motion(true));           // 0x21 - insert in the middle
+        p.add(BTHome::packet_id(1));           // 0x00 - new front
+        p.add(BTHome::conductivity(3120.0f));  // 0x56 - new tail
+
+        const std::uint8_t want_sd[] = {
+            0xD2, 0xFC, 0x40,
+            0x00, 0x01,                   // packet_id
+            0x01, 0x57,                   // battery
+            0x21, 0x01,                   // motion
+            0x50, 0x55, 0x39, 0x61, 0x64, // timestamp
+            0x56, 0x30, 0x0C,             // conductivity
+        };
+        expect_bytes("insert front/middle/end", p.serviceData(), p.serviceDataSize(), want_sd, sizeof(want_sd));
+    }
+
+    // Tests: Three measurements with the same object_id.
+    // Expects: Insertion order preserved among all three (stable sort).
+    {
+        BTHomePacket<31> p;
+        p.add(BTHome::temperature(1.0f)); // raw 100
+        p.add(BTHome::temperature(2.0f)); // raw 200
+        p.add(BTHome::temperature(3.0f)); // raw 300
+
+        const std::uint8_t want_sd[] = {
+            0xD2, 0xFC, 0x40,
+            0x02, 0x64, 0x00,
+            0x02, 0xC8, 0x00,
+            0x02, 0x2C, 0x01,
+        };
+        expect_bytes("stable order for three equal ids", p.serviceData(), p.serviceDataSize(), want_sd, sizeof(want_sd));
+    }
+}
+
+static void test_exact_capacity_boundaries()
+{
+    // Tests: Adds that fill the packet to exactly its capacity.
+    // Expects: The exactly-fitting add succeeds; one more byte is rejected and
+    // the packet bytes stay untouched.
+    {
+        BTHomePacket<10> p;                            // header 5 + up to 5 payload bytes
+        expect_true("exact-fit first add", p.add(BTHome::temperature(20.0f))); // 3 bytes -> size 8
+        expect_true("exact-fit second add", p.add(BTHome::motion(true)));      // 2 bytes -> size 10 == capacity
+        expect_true("packet is exactly full", p.size() == 10);
+
+        const bool overflow = p.add(BTHome::battery(50)); // 2 bytes -> would be 12
+        expect_true("one-past-full add rejected", !overflow);
+
+        const std::uint8_t want_ad[] = {
+            0x09, 0x16, 0xD2, 0xFC, 0x40,
+            0x02, 0xD0, 0x07,
+            0x21, 0x01,
+        };
+        expect_bytes("full packet unchanged after rejected add", p.data(), p.size(), want_ad, sizeof(want_ad));
+    }
+
+    // Tests: Repeatedly adding until the packet reports overflow.
+    // Expects: add() eventually returns false, the AD length byte always
+    // matches the serialized size, and size() never exceeds capacity.
+    {
+        BTHomePacket<31> p;
+        int added = 0;
+        while (p.add(BTHome::battery(static_cast<std::uint8_t>(added))) && added < 100)
+        {
+            ++added;
+        }
+        expect_true("fill loop terminates before 100 adds", added < 100);
+        expect_true("filled size within capacity", p.size() <= 31);
+        expect_true("filled AD length byte consistent", p.data()[0] == p.size() - 1);
+        expect_true("fill count matches capacity math", added == (31 - 5) / 2); // 13 battery measurements
+    }
+}
+
+static void test_flags_after_adds()
+{
+    // Tests: Changing device-info flags after measurements were added.
+    // Expects: Only the device-info byte changes; measurement bytes intact.
+    BTHomePacket<31> p;
+    p.add(BTHome::temperature(20.0f));
+    p.add(BTHome::motion(true));
+
+    p.setTriggerBased(true);
+    const std::uint8_t want_trigger[] = {
+        0xD2, 0xFC, 0x44,
+        0x02, 0xD0, 0x07,
+        0x21, 0x01,
+    };
+    expect_bytes("trigger flag set after adds", p.serviceData(), p.serviceDataSize(), want_trigger, sizeof(want_trigger));
+
+    p.setEncrypted(true);
+    const std::uint8_t want_both[] = {
+        0xD2, 0xFC, 0x45,
+        0x02, 0xD0, 0x07,
+        0x21, 0x01,
+    };
+    expect_bytes("encrypted flag set after adds", p.serviceData(), p.serviceDataSize(), want_both, sizeof(want_both));
+
+    p.setTriggerBased(false);
+    p.setEncrypted(false);
+    const std::uint8_t want_cleared[] = {
+        0xD2, 0xFC, 0x40,
+        0x02, 0xD0, 0x07,
+        0x21, 0x01,
+    };
+    expect_bytes("flags cleared after adds", p.serviceData(), p.serviceDataSize(), want_cleared, sizeof(want_cleared));
+}
+
+static void test_accessor_idempotence()
+{
+    // Tests: Repeated accessor calls and a rejected add in between.
+    // Expects: data()/size()/serviceData() are pure reads - identical results
+    // on every call, also after a failed add.
+    BTHomePacket<8> p;
+    p.add(BTHome::battery(50));
+
+    std::uint8_t snapshot[8] = {};
+    const std::size_t size_before = p.size();
+    std::memcpy(snapshot, p.data(), size_before);
+
+    (void) p.add(BTHome::humidity(40.0f)); // rejected (capacity)
+    (void) p.data();
+    (void) p.serviceData();
+
+    expect_true("size unchanged by reads and failed add", p.size() == size_before);
+    expect_bytes("bytes unchanged by reads and failed add", p.data(), p.size(), snapshot, size_before);
+    expect_true("serviceData stays in sync", p.serviceData() == p.data() + 2 && p.serviceDataSize() == p.size() - 2);
+}
+
 int main()
 {
     test_header_and_basic_packet();
@@ -466,6 +602,10 @@ int main()
     test_rounding_and_clamping();
     test_capacity_and_overflow_behavior();
     test_advertising_builder();
+    test_insert_positions();
+    test_exact_capacity_boundaries();
+    test_flags_after_adds();
+    test_accessor_idempotence();
 
     std::printf("\n%s\n", g_failures == 0 ? "ALL TESTS PASSED" : "SOME TESTS FAILED");
     return g_failures == 0 ? 0 : 1;

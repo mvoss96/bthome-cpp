@@ -42,10 +42,12 @@ namespace BTHome
             case SensorObjectId::VolumeFlowRate:
             case SensorObjectId::Acceleration:
             case SensorObjectId::Gyroscope:
-            case SensorObjectId::CurrentS16:
                 return {0.001f, 2, false};
+            case SensorObjectId::CurrentS16:
+                return {0.001f, 2, true};
             case SensorObjectId::MassKg:
             case SensorObjectId::MassLb:
+            case SensorObjectId::Speed:
                 return {0.01f, 2, false};
             case SensorObjectId::Voltage:
             case SensorObjectId::Current:
@@ -63,7 +65,6 @@ namespace BTHome
             case SensorObjectId::TemperatureC1:
                 return {0.1f, 2, true};
             case SensorObjectId::DistanceM:
-            case SensorObjectId::Speed:
             case SensorObjectId::VolumeL:
             case SensorObjectId::VoltageCenti:
             case SensorObjectId::Precipitation:
