@@ -12,7 +12,7 @@ jobs:
       matrix:
         compiler: [g++, clang++]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Build tests
         run: |
           mkdir -p build
