@@ -8,7 +8,7 @@
 #include <zephyr/kernel.h>
 
 // Built once at startup; the bytes stay valid because `packet` is static.
-static BTHomePacket<31> packet;
+static BTHome::Packet<31> packet;
 
 int main(void) {
     packet.add(BTHome::temperature(22.4f));
