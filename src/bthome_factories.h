@@ -68,6 +68,41 @@ namespace BTHome
     inline Measurement light_level(std::uint8_t v) { return detail::u8(SensorObjectId::LightLevel, v); }
     inline Measurement settings_revision(std::uint8_t v) { return detail::u8(SensorObjectId::SettingsRevision, v); }
 
+    // Variable-length objects. Input longer than VarMeasurement::kMaxBytes is
+    // truncated (consistent with the clamping behavior of the scalar factories).
+    inline VarMeasurement text(const char *s)
+    {
+        VarMeasurement m;
+        m.object_id = static_cast<std::uint8_t>(SensorObjectId::Text);
+        std::size_t n = 0;
+        while (s != nullptr && s[n] != '\0' && n < VarMeasurement::kMaxBytes)
+        {
+            m.data[n] = static_cast<std::uint8_t>(s[n]);
+            ++n;
+        }
+        m.len = static_cast<std::uint8_t>(n);
+        return m;
+    }
+
+    inline VarMeasurement raw(const std::uint8_t *bytes, std::size_t count)
+    {
+        VarMeasurement m;
+        m.object_id = static_cast<std::uint8_t>(SensorObjectId::Raw);
+        if (bytes != nullptr)
+        {
+            if (count > VarMeasurement::kMaxBytes)
+            {
+                count = VarMeasurement::kMaxBytes;
+            }
+            for (std::size_t i = 0; i < count; ++i)
+            {
+                m.data[i] = bytes[i];
+            }
+            m.len = static_cast<std::uint8_t>(count);
+        }
+        return m;
+    }
+
     // Device objects
     inline Measurement device_type_id(std::uint16_t v) { return detail::u16(DeviceObjectId::DeviceTypeId, v); }
     inline Measurement firmware_version_u32(std::uint32_t v) { return detail::u32(DeviceObjectId::FirmwareVersionU32, v); }

@@ -45,7 +45,21 @@ public:
         {
             return false;
         }
-        return insert(m.object_id, m.data, m.len);
+        return insert(m.object_id, m.data, m.len, false);
+    }
+
+    /**
+     * @brief Adds one variable-length measurement (Text/Raw) to the packet.
+     * @param m Variable-length measurement to insert.
+     * @return true if the measurement was inserted, false if capacity would be exceeded.
+     */
+    bool add(const BTHome::VarMeasurement &m)
+    {
+        if (m.len > sizeof(m.data))
+        {
+            return false;
+        }
+        return insert(m.object_id, m.data, m.len, true);
     }
 
     /**
@@ -107,20 +121,21 @@ public:
 
 private:
     /**
-     * @brief Inserts one entry ([id][value bytes]) in canonical order into m_buf.
+     * @brief Inserts one entry in canonical order into m_buf.
      * @param id Object ID byte.
-     * @param value Little-endian value bytes.
+     * @param value Value bytes.
      * @param vlen Number of value bytes.
+     * @param with_len_byte true to serialize as [id][len][bytes] (Text/Raw), false for [id][bytes].
      * @return true if insertion succeeded, false on capacity overflow.
      */
-    bool insert(std::uint8_t id, const std::uint8_t *value, std::size_t vlen)
+    bool insert(std::uint8_t id, const std::uint8_t *value, std::size_t vlen, bool with_len_byte)
     {
         if (m_count >= kMaxItems)
         {
             return false;
         }
 
-        const std::size_t need = 1 + vlen;
+        const std::size_t need = 1 + (with_len_byte ? 1 : 0) + vlen;
         if (m_size + need > Capacity)
         {
             return false;
@@ -149,10 +164,15 @@ private:
         ++m_count;
 
         // Write the entry and finalize the AD length byte.
-        m_buf[pos] = id;
+        std::size_t p = pos;
+        m_buf[p++] = id;
+        if (with_len_byte)
+        {
+            m_buf[p++] = static_cast<std::uint8_t>(vlen);
+        }
         for (std::size_t i = 0; i < vlen; ++i)
         {
-            m_buf[pos + 1 + i] = value[i];
+            m_buf[p + i] = value[i];
         }
         m_size += need;
         m_buf[0] = static_cast<std::uint8_t>(m_size - 1);
