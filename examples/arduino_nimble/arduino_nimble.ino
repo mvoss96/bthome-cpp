@@ -13,7 +13,7 @@ void setup() {
   Serial.begin(115200);
   NimBLEDevice::init("bthome");
 
-  BTHomePacket<31> packet;
+  BTHome::Packet<31> packet;
   packet.add(BTHome::temperature(22.4f));
   packet.add(BTHome::humidity(54.3f));
   packet.add(BTHome::battery(92));

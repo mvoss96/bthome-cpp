@@ -6,9 +6,12 @@
 
 #include "bthome_packet.h"
 
+namespace BTHome
+{
+
 /**
  * @brief Build a raw BLE advertising payload for BTHome.
- * @tparam PacketCapacity Capacity parameter of the input BTHomePacket.
+ * @tparam PacketCapacity Capacity parameter of the input Packet.
  * @param packet Source BTHome service-data AD element.
  * @param out Destination byte buffer for the final raw advertising payload.
  * @param out_capacity Capacity of @p out in bytes.
@@ -17,11 +20,11 @@
  * @return Payload size in bytes on success, or -1 on error.
  */
 template <std::size_t PacketCapacity>
-int build_bthome_advertising(const BTHomePacket<PacketCapacity> &packet,
-                             std::uint8_t *out,
-                             std::size_t out_capacity,
-                             const char *local_name = nullptr,
-                             bool complete_local_name = true)
+int build_advertising(const Packet<PacketCapacity> &packet,
+                      std::uint8_t *out,
+                      std::size_t out_capacity,
+                      const char *local_name = nullptr,
+                      bool complete_local_name = true)
 {
     constexpr std::size_t kFlagsBytes = 3; // 02 01 06
     if (out == nullptr)
@@ -59,3 +62,5 @@ int build_bthome_advertising(const BTHomePacket<PacketCapacity> &packet,
 
     return static_cast<int>(p);
 }
+
+} // namespace BTHome

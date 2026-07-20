@@ -5,8 +5,11 @@
 
 #include "bthome_defs.h"
 
+namespace BTHome
+{
+
 template <std::size_t Capacity>
-class BTHomePacket
+class Packet
 {
 private:
     static constexpr std::size_t kHeaderBytes = BTHome::ServiceDataHeader::kByteCount; // [len][type][uuid lo][uuid hi][device-info]
@@ -28,7 +31,7 @@ public:
     /**
      * @brief Constructs an empty BTHome packet and initializes the fixed header bytes.
      */
-    BTHomePacket()
+    Packet()
     {
         m_header.writeTo(m_buf);
         m_buf[0] = static_cast<std::uint8_t>(m_size - 1);
@@ -179,3 +182,5 @@ private:
         return true;
     }
 };
+
+} // namespace BTHome

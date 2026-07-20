@@ -10,8 +10,8 @@ Dependency-free C++17 BTHome v2 payload builder.
 
 ## What this library provides
 
-1. BTHome service-data AD element via `BTHomePacket<Capacity>`.
-2. Full raw advertising payload (Flags + BTHome service data) via `build_bthome_advertising(...)`.
+1. BTHome service-data AD element via `BTHome::Packet<Capacity>`.
+2. Full raw advertising payload (Flags + BTHome service data) via `BTHome::build_advertising(...)`.
 3. All BTHome v2 object types, including variable-length Text (0x53) and Raw (0x54) via `BTHome::text(...)` / `BTHome::raw(...)`.
 
 ## Install
@@ -75,7 +75,7 @@ For nRF52840 Dongle use board `nrf52840dongle/nrf52840`.
 ```cpp
 #include "bthome.h"
 
-BTHomePacket<31> packet;
+BTHome::Packet<31> packet;
 packet.add(BTHome::temperature(22.4f));
 packet.add(BTHome::humidity(54.3f));
 packet.add(BTHome::battery(92));
@@ -92,7 +92,7 @@ std::size_t ad_size = packet.size();
 
 ```cpp
 std::uint8_t adv[31] = {};
-int n = build_bthome_advertising(packet, adv, sizeof(adv));
+int n = BTHome::build_advertising(packet, adv, sizeof(adv));
 if (n < 0)
 {
     // buffer too small or invalid args

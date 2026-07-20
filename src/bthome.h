@@ -3,9 +3,9 @@
 #pragma once
 
 // What this library can generate:
-// 1) BTHome service-data AD element (type 0x16), via BTHomePacket.
+// 1) BTHome service-data AD element (type 0x16), via BTHome::Packet.
 // 2) BTHome raw advertising payload [Flags AD + BTHome Service Data AD],
-//    via build_bthome_advertising(...).
+//    via BTHome::build_advertising(...).
 
 #include "bthome_defs.h"
 #include "bthome_encoding.h"

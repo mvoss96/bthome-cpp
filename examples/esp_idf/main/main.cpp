@@ -34,7 +34,7 @@ extern "C" void app_main(void) {
     esp_bluedroid_enable();
     esp_ble_gap_register_callback(gap_cb);
 
-    BTHomePacket<31> packet;
+    BTHome::Packet<31> packet;
     packet.add(BTHome::temperature(22.4f));
     packet.add(BTHome::humidity(54.3f));
     packet.add(BTHome::battery(92));

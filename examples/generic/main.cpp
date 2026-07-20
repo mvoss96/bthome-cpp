@@ -8,7 +8,7 @@
 #include <cstdio>
 
 int main() {
-    BTHomePacket<31> packet;
+    BTHome::Packet<31> packet;
 
     // Add in any order; the library emits canonical (ascending) order.
     bool ok = true;
