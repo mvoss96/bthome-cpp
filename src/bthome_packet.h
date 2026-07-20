@@ -11,19 +11,28 @@ class BTHomePacket
 private:
     static constexpr std::size_t kHeaderBytes = BTHome::ServiceDataHeader::kByteCount; // [len][type][uuid lo][uuid hi][device-info]
     static_assert(Capacity >= kHeaderBytes, "Capacity must hold the BTHome header");   // Capacity must fit fixed header bytes.
-    static constexpr std::size_t kMaxItems = (Capacity - kHeaderBytes) / 2 + 1;        // Worst-case slots; exact fit is checked in insert().
+    static_assert(Capacity <= 255, "AD element length byte limits Capacity to 255");
+    static constexpr std::size_t kMaxItems = (Capacity - kHeaderBytes) / 2 + 1; // Worst-case entry count; exact fit is checked in insert().
 
-    BTHome::ServiceDataHeader m_header = {};     // Header model incl. device-info flags.
-    BTHome::Measurement m_items[kMaxItems] = {}; // Sorted measurements before serialization.
-    std::size_t m_count = 0;                     // Number of valid entries in m_items.
-    std::uint8_t m_buf[Capacity] = {};           // Final AD element bytes.
-    std::size_t m_size = kHeaderBytes;           // Current used bytes in m_buf.
+    // The serialized AD element is the single source of truth: measurements are
+    // inserted in canonical (ascending object-id) order directly into m_buf.
+    // m_offsets tracks where each entry starts, so insertion positions can be
+    // found without knowing the value width of already-stored object ids.
+    BTHome::ServiceDataHeader m_header = {}; // Header model incl. device-info flags.
+    std::uint8_t m_buf[Capacity] = {};       // Final AD element bytes.
+    std::size_t m_size = kHeaderBytes;       // Current used bytes in m_buf.
+    std::uint8_t m_offsets[kMaxItems] = {};  // Start offset of each entry in m_buf, ascending.
+    std::size_t m_count = 0;                 // Number of entries.
 
 public:
     /**
      * @brief Constructs an empty BTHome packet and initializes the fixed header bytes.
      */
-    BTHomePacket() { rebuild(); }
+    BTHomePacket()
+    {
+        m_header.writeTo(m_buf);
+        m_buf[0] = static_cast<std::uint8_t>(m_size - 1);
+    }
 
     /**
      * @brief Adds one measurement to the packet.
@@ -32,7 +41,25 @@ public:
      */
     bool add(const BTHome::Measurement &m)
     {
-        return insert(m);
+        if (m.len > sizeof(m.data))
+        {
+            return false;
+        }
+        return insert(m.object_id, m.data, m.len, false);
+    }
+
+    /**
+     * @brief Adds one variable-length measurement (Text/Raw) to the packet.
+     * @param m Variable-length measurement to insert.
+     * @return true if the measurement was inserted, false if capacity would be exceeded.
+     */
+    bool add(const BTHome::VarMeasurement &m)
+    {
+        if (m.len > sizeof(m.data))
+        {
+            return false;
+        }
+        return insert(m.object_id, m.data, m.len, true);
     }
 
     /**
@@ -42,7 +69,7 @@ public:
     void setTriggerBased(bool on)
     {
         m_header.m_device_info.m_trigger_based = on;
-        rebuild();
+        m_buf[kHeaderBytes - 1] = m_header.m_device_info.toByte();
     }
 
     /**
@@ -53,7 +80,7 @@ public:
     void setEncrypted(bool on)
     {
         m_header.m_device_info.m_encrypted = on;
-        rebuild();
+        m_buf[kHeaderBytes - 1] = m_header.m_device_info.toByte();
     }
 
     /**
@@ -94,59 +121,61 @@ public:
 
 private:
     /**
-     * @brief Inserts one measurement in canonical order and rebuilds serialized bytes.
-     * @param m Measurement to insert.
+     * @brief Inserts one entry in canonical order into m_buf.
+     * @param id Object ID byte.
+     * @param value Value bytes.
+     * @param vlen Number of value bytes.
+     * @param with_len_byte true to serialize as [id][len][bytes] (Text/Raw), false for [id][bytes].
      * @return true if insertion succeeded, false on capacity overflow.
      */
-    bool insert(const BTHome::Measurement &m)
+    bool insert(std::uint8_t id, const std::uint8_t *value, std::size_t vlen, bool with_len_byte)
     {
         if (m_count >= kMaxItems)
         {
             return false;
         }
 
-        if (m_size + 1 + m.len > Capacity)
+        const std::size_t need = 1 + (with_len_byte ? 1 : 0) + vlen;
+        if (m_size + need > Capacity)
         {
             return false;
         }
 
-        // Find first slot whose object_id exceeds m's (canonical ascending order).
-        std::size_t pos = 0;
-        while (pos < m_count && m_items[pos].object_id <= m.object_id)
+        // Find first entry whose object_id exceeds id (stable for equal ids).
+        std::size_t k = 0;
+        while (k < m_count && m_buf[m_offsets[k]] <= id)
         {
-            ++pos;
+            ++k;
+        }
+        const std::size_t pos = (k == m_count) ? m_size : m_offsets[k];
+
+        // Shift the buffer tail up by `need` bytes (backwards, regions overlap).
+        for (std::size_t i = m_size; i > pos; --i)
+        {
+            m_buf[i + need - 1] = m_buf[i - 1];
         }
 
-        // Shift the tail up by one, then drop m into place.
-        for (std::size_t k = m_count; k > pos; --k)
+        // Shift the offsets of the moved entries and record the new one.
+        for (std::size_t j = m_count; j > k; --j)
         {
-            m_items[k] = m_items[k - 1];
+            m_offsets[j] = static_cast<std::uint8_t>(m_offsets[j - 1] + need);
         }
-        m_items[pos] = m;
+        m_offsets[k] = static_cast<std::uint8_t>(pos);
         ++m_count;
-        rebuild();
-        return true;
-    }
 
-    /**
-     * @brief Rebuilds the serialized AD element from header and stored measurements.
-     */
-    void rebuild()
-    {
-        m_header.writeTo(m_buf);
-        std::size_t p = kHeaderBytes;
-
-        for (std::size_t k = 0; k < m_count; ++k)
+        // Write the entry and finalize the AD length byte.
+        std::size_t p = pos;
+        m_buf[p++] = id;
+        if (with_len_byte)
         {
-            const BTHome::Measurement &m = m_items[k];
-            m_buf[p++] = m.object_id;
-            for (std::uint8_t b = 0; b < m.len; ++b)
-            {
-                m_buf[p++] = m.data[b];
-            }
+            m_buf[p++] = static_cast<std::uint8_t>(vlen);
         }
-
-        m_buf[0] = static_cast<std::uint8_t>(p - 1);
-        m_size = p;
+        for (std::size_t i = 0; i < vlen; ++i)
+        {
+            m_buf[p + i] = value[i];
+        }
+        m_size += need;
+        m_buf[0] = static_cast<std::uint8_t>(m_size - 1);
+        return true;
     }
 };

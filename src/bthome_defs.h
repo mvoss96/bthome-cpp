@@ -17,6 +17,20 @@ namespace BTHome
         std::uint8_t data[6] = {}; // little-endian value, `len` bytes used
     };
 
+    // A variable-length measurement for Text (0x53) and Raw (0x54) objects,
+    // which are serialized with an extra length byte: [id][len][bytes...].
+    // Produced by BTHome::text() / BTHome::raw(); owns its bytes by value.
+    struct VarMeasurement
+    {
+        // Largest value that can ever fit one AD element: 31 bytes capacity
+        // minus service-data header (5) minus object id and length byte (2).
+        static constexpr std::size_t kMaxBytes = 24;
+
+        std::uint8_t object_id = 0;
+        std::uint8_t len = 0;              // number of value bytes (0..kMaxBytes)
+        std::uint8_t data[kMaxBytes] = {}; // value bytes, `len` bytes used
+    };
+
     // BTHome device-information byte (first byte after UUID in service data).
     struct DeviceInfo
     {

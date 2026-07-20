@@ -592,6 +592,91 @@ static void test_accessor_idempotence()
     expect_true("serviceData stays in sync", p.serviceData() == p.data() + 2 && p.serviceDataSize() == p.size() - 2);
 }
 
+static void test_text_and_raw()
+{
+    // Tests: Text (0x53) serialization with the bthome.io spec example.
+    // Expects: [53][len][bytes] with the extra length byte, "Hello World!" = 12 chars.
+    {
+        BTHomePacket<31> p;
+        expect_true("text add ok", p.add(BTHome::text("Hello World!")));
+        const std::uint8_t want_sd[] = {
+            0xD2, 0xFC, 0x40,
+            0x53, 0x0C, 0x48, 0x65, 0x6C, 0x6C, 0x6F, 0x20, 0x57, 0x6F, 0x72, 0x6C, 0x64, 0x21,
+        };
+        expect_bytes("text spec example", p.serviceData(), p.serviceDataSize(), want_sd, sizeof(want_sd));
+    }
+
+    // Tests: Raw (0x54) serialization.
+    // Expects: [54][len][bytes] with the extra length byte.
+    {
+        BTHomePacket<31> p;
+        const std::uint8_t payload[] = {0xDE, 0xAD, 0xBE, 0xEF};
+        expect_true("raw add ok", p.add(BTHome::raw(payload, sizeof(payload))));
+        const std::uint8_t want_sd[] = {0xD2, 0xFC, 0x40, 0x54, 0x04, 0xDE, 0xAD, 0xBE, 0xEF};
+        expect_bytes("raw entry", p.serviceData(), p.serviceDataSize(), want_sd, sizeof(want_sd));
+    }
+
+    // Tests: Text sorts among regular measurements by object id.
+    // Expects: battery (0x01) < temperature (0x02) < text (0x53) < conductivity (0x56).
+    {
+        BTHomePacket<31> p;
+        p.add(BTHome::text("hi"));
+        p.add(BTHome::conductivity(3120.0f));
+        p.add(BTHome::temperature(21.53f));
+        p.add(BTHome::battery(87));
+        const std::uint8_t want_sd[] = {
+            0xD2, 0xFC, 0x40,
+            0x01, 0x57,
+            0x02, 0x69, 0x08,
+            0x53, 0x02, 'h', 'i',
+            0x56, 0x30, 0x0C,
+        };
+        expect_bytes("text sorted among measurements", p.serviceData(), p.serviceDataSize(), want_sd, sizeof(want_sd));
+    }
+
+    // Tests: Factory truncation of over-long input.
+    // Expects: Text clamped to VarMeasurement::kMaxBytes (24) characters.
+    {
+        const BTHome::VarMeasurement m =
+            BTHome::text("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"); // 30 chars
+        expect_true("text truncated to kMaxBytes", m.len == BTHome::VarMeasurement::kMaxBytes);
+        expect_true("empty text has len 0", BTHome::text("").len == 0);
+        expect_true("null text has len 0", BTHome::text(nullptr).len == 0);
+    }
+
+    // Tests: Capacity overflow with a text entry.
+    // Expects: Too-long text rejected without modifying the packet; a shorter
+    // one fits afterwards.
+    {
+        BTHomePacket<12> p; // header 5 + 7 free bytes
+        expect_true("oversized text rejected", !p.add(BTHome::text("toolong"))); // needs 2+7=9
+        expect_true("packet untouched after rejection", p.size() == 5);
+
+        expect_true("fitting text accepted", p.add(BTHome::text("abc"))); // needs 2+3=5
+        const std::uint8_t want_sd[] = {0xD2, 0xFC, 0x40, 0x53, 0x03, 'a', 'b', 'c'};
+        expect_bytes("small packet with text", p.serviceData(), p.serviceDataSize(), want_sd, sizeof(want_sd));
+    }
+
+    // Tests: Text packet through the advertising builder.
+    // Expects: Flags AD + service data with text, unchanged by the builder.
+    {
+        BTHomePacket<31> p;
+        p.add(BTHome::battery(87));
+        p.add(BTHome::text("ok"));
+
+        std::uint8_t adv[31] = {};
+        const int adv_size = build_bthome_advertising(p, adv, sizeof(adv));
+        const std::uint8_t want[] = {
+            0x02, 0x01, 0x06,
+            0x0A, 0x16, 0xD2, 0xFC, 0x40,
+            0x01, 0x57,
+            0x53, 0x02, 'o', 'k',
+        };
+        expect_true("adv with text build success", adv_size >= 0);
+        expect_bytes("adv with text payload", adv, static_cast<std::size_t>(adv_size), want, sizeof(want));
+    }
+}
+
 int main()
 {
     test_header_and_basic_packet();
@@ -606,6 +691,7 @@ int main()
     test_exact_capacity_boundaries();
     test_flags_after_adds();
     test_accessor_idempotence();
+    test_text_and_raw();
 
     std::printf("\n%s\n", g_failures == 0 ? "ALL TESTS PASSED" : "SOME TESTS FAILED");
     return g_failures == 0 ? 0 : 1;

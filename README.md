@@ -12,6 +12,7 @@ Dependency-free C++17 BTHome v2 payload builder.
 
 1. BTHome service-data AD element via `BTHomePacket<Capacity>`.
 2. Full raw advertising payload (Flags + BTHome service data) via `build_bthome_advertising(...)`.
+3. All BTHome v2 object types, including variable-length Text (0x53) and Raw (0x54) via `BTHome::text(...)` / `BTHome::raw(...)`.
 
 ## Install
 
