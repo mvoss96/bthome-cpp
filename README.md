@@ -154,7 +154,9 @@ Expected output ends with:
 
 - Arduino NimBLE: `examples/arduino_nimble/arduino_nimble.ino`
 - ESP-IDF: `examples/esp_idf/main/main.cpp`
+- ESP-IDF encrypted (MAC + NVS counter persistence): `examples/esp_idf_encrypted/main/main.cpp`
 - Generic C++: `examples/generic/main.cpp`
+- Generic encrypted (prints the official spec vector): `examples/generic_encrypted/main.cpp`
 - Zephyr: `examples/zephyr/src/main.cpp`
 
 ## Notes
