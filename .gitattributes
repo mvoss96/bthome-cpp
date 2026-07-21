@@ -1,0 +1,7 @@
+# Keep release archives (GitHub "Source code" downloads, git archive) lean:
+# ship only what library users need - src/, examples/, README, LICENSE and
+# the library metadata. Development infrastructure stays repo-only.
+/tests export-ignore
+/.github export-ignore
+/.devcontainer export-ignore
+/.gitattributes export-ignore
