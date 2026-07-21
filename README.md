@@ -13,6 +13,7 @@ Dependency-free C++17 BTHome v2 payload builder.
 1. BTHome service-data AD element via `BTHome::Packet<Capacity>`.
 2. Full raw advertising payload (Flags + BTHome service data) via `BTHome::build_advertising(...)`.
 3. All BTHome v2 object types, including variable-length Text (0x53) and Raw (0x54) via `BTHome::text(...)` / `BTHome::raw(...)`.
+4. AES-CCM encrypted payloads via `BTHome::EncryptedPacket<Capacity>` + `BTHome::build_encrypted_advertising(...)` with a pluggable cipher backend.
 
 ## Install
 
@@ -102,6 +103,39 @@ if (n < 0)
 Result format:
 
 `[Flags AD][BTHome Service Data AD][optional Local Name AD]`
+
+## Encryption (AES-CCM)
+
+The library implements the BTHome v2 encryption scheme (nonce construction,
+counter handling, payload layout) but stays dependency-free: the AES-128-CCM
+primitive is supplied as a callback. A ready-made
+[mbedtls](https://github.com/Mbed-TLS/mbedtls) adapter ships in
+`bthome_crypto_mbedtls.h` (include it separately — ESP-IDF provides mbedtls
+out of the box; on desktop link `-lmbedcrypto`).
+
+```cpp
+#include "bthome.h"
+#include "bthome_crypto_mbedtls.h"
+
+// EncryptedPacket<28> reserves the 8-byte overhead (counter + MIC) internally:
+// size() already includes it, so fill logic can never overflow the advertisement.
+BTHome::EncryptedPacket<28> packet;
+packet.add(BTHome::temperature(22.4f));
+
+BTHome::Encryptor encryptor(&BTHome::mbedtls_ccm_backend);
+encryptor.setKey(key);  // 16 bytes, shared with Home Assistant
+encryptor.setMac(mac);  // the MAC your BLE stack advertises with
+encryptor.setCounter(restored_counter);  // restore after reboot!
+
+std::uint8_t adv[31] = {};
+int n = BTHome::build_encrypted_advertising(packet, encryptor, adv, sizeof(adv));
+```
+
+The counter is owned by the `Encryptor` and consumed exactly once per
+successful build, so CCM nonce reuse is structurally impossible. It must
+survive reboots: persist `encryptor.counter()` periodically and restore it
+with a safety margin via `setCounter()` — receivers reject non-increasing
+counters as replays. Encryption costs 8 bytes of advertisement budget.
 
 ## Local checks
 

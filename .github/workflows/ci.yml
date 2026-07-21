@@ -13,12 +13,16 @@ jobs:
         compiler: [g++, clang++]
     steps:
       - uses: actions/checkout@v5
+      - name: Install mbedtls (encryption test backend)
+        run: sudo apt-get update && sudo apt-get install -y libmbedtls-dev
       - name: Build tests
         run: |
           mkdir -p build
           ${{ matrix.compiler }} -std=c++17 -fno-exceptions -fno-rtti -Wall -Wextra -Werror -I src tests/test_bthome.cpp -o build/test_bthome
           ${{ matrix.compiler }} -std=c++17 -fno-exceptions -fno-rtti -Wall -Wextra -Werror -I src tests/test_factories.cpp -o build/test_factories
+          ${{ matrix.compiler }} -std=c++17 -fno-exceptions -fno-rtti -Wall -Wextra -Werror -I src tests/test_encryption.cpp -lmbedcrypto -o build/test_encryption
       - name: Run tests
         run: |
           ./build/test_bthome
           ./build/test_factories
+          ./build/test_encryption
