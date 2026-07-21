@@ -123,36 +123,52 @@ jobs:
 
   ncs:
     # Same encrypted example against the nRF Connect SDK: proves the PSA
-    # adapter on Nordic's nrf_security stack (Oberon backend).
+    # adapter on Nordic's nrf_security stack (Oberon backend). Plain runner
+    # with the Zephyr SDK toolchain - Nordic's toolchain container exposes
+    # its tools only through the entrypoint env, which Actions bypasses.
     runs-on: ubuntu-latest
-    container: ghcr.io/nrfconnect/sdk-nrf-toolchain:v3.2.0
     steps:
       - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
       - uses: actions/cache@v4
         with:
-          path: ncs-ws
-          key: ncs-${{ env.NCS_VERSION }}-v3
-      - name: Set up NCS workspace
-        # The toolchain image provides west only through its entrypoint
-        # environment, which Actions-injected shells bypass - and its system
-        # python has no pip either.
+          path: |
+            ncs-ws
+            ~/zephyr-sdk
+          key: ncs-${{ env.NCS_VERSION }}-sdk-${{ env.ZEPHYR_SDK_VERSION }}-v4
+      - name: Install host dependencies
         run: |
-          apt-get update -qq && apt-get install -y -qq python3-pip
-          python3 -m pip install --quiet --break-system-packages west
+          sudo apt-get update && sudo apt-get install -y ninja-build gperf device-tree-compiler
+          pip install west
+      - name: Set up NCS workspace
+        run: |
           if [ ! -d ncs-ws/.west ]; then
-            mkdir -p ncs-ws && cd ncs-ws
-            git clone --depth 1 --branch $NCS_VERSION https://github.com/nrfconnect/sdk-nrf nrf
-            west init -l nrf
-            west update --narrow -o=--depth=1 zephyr nrfxlib mbedtls oberon-psa-crypto bsim
-            # cmsis & hal_nordic are resolved via project imports, which west
-            # cannot update selectively (a plain `west update` would pull the
-            # multi-GB full module set) - clone them at their pinned revisions.
-            west list -f "{name} {path} {revision} {url}" cmsis cmsis_6 hal_nordic |
-            while read -r name path rev url; do
-              mkdir -p "$path" && git -C "$path" init -q
-              git -C "$path" fetch -q --depth 1 "$url" "$rev"
-              git -C "$path" checkout -q FETCH_HEAD
-            done
+            (
+              mkdir -p ncs-ws && cd ncs-ws
+              git clone --depth 1 --branch $NCS_VERSION https://github.com/nrfconnect/sdk-nrf nrf
+              west init -l nrf
+              west update --narrow -o=--depth=1 zephyr nrfxlib mbedtls oberon-psa-crypto bsim
+              # cmsis & hal_nordic are resolved via project imports, which west
+              # cannot update selectively (a plain `west update` would pull the
+              # multi-GB full module set) - clone them at their pinned revisions.
+              west list -f "{name} {path} {revision} {url}" cmsis cmsis_6 hal_nordic |
+              while read -r name path rev url; do
+                mkdir -p "$path" && git -C "$path" init -q
+                git -C "$path" fetch -q --depth 1 "$url" "$rev"
+                git -C "$path" checkout -q FETCH_HEAD
+              done
+            )
+          fi
+          pip install -r ncs-ws/zephyr/scripts/requirements-base.txt
+      - name: Install Zephyr SDK
+        run: |
+          if [ ! -d ~/zephyr-sdk/zephyr-sdk-$ZEPHYR_SDK_VERSION ]; then
+            mkdir -p ~/zephyr-sdk && cd ~/zephyr-sdk
+            wget -q https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v$ZEPHYR_SDK_VERSION/zephyr-sdk-${ZEPHYR_SDK_VERSION}_linux-x86_64_minimal.tar.xz
+            tar xf zephyr-sdk-${ZEPHYR_SDK_VERSION}_linux-x86_64_minimal.tar.xz
+            cd zephyr-sdk-$ZEPHYR_SDK_VERSION && ./setup.sh -t arm-zephyr-eabi -h -c
           fi
       - name: Build encrypted example
         run: |
