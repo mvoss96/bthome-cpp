@@ -74,12 +74,12 @@ int build_encrypted_advertising(const EncryptedPacket<AdvCapacity> &packet,
 class Encryptor
 {
 public:
-    static constexpr std::size_t kKeyBytes = 16;
-    static constexpr std::size_t kMacBytes = 6;
-    static constexpr std::size_t kNonceBytes = 13; // MAC(6) + UUID(2) + device-info(1) + counter(4)
-    static constexpr std::size_t kCounterBytes = 4;
-    static constexpr std::size_t kMicBytes = 4;
-    static constexpr std::size_t kOverheadBytes = kCounterBytes + kMicBytes;
+    static constexpr std::size_t kKeyBytes = 16;     // AES-128 key length; entered in Home Assistant as 32 hex chars.
+    static constexpr std::size_t kMacBytes = 6;      // Bluetooth MAC address length (part of the nonce).
+    static constexpr std::size_t kNonceBytes = 13;   // CCM nonce: MAC(6) + UUID(2) + device-info(1) + counter(4).
+    static constexpr std::size_t kCounterBytes = 4;  // Replay-protection counter, sent little-endian after the ciphertext.
+    static constexpr std::size_t kMicBytes = 4;      // Message integrity check (auth tag), sent after the counter.
+    static constexpr std::size_t kOverheadBytes = kCounterBytes + kMicBytes; // Extra payload bytes an encrypted packet needs.
 
     /**
      * @brief Constructs an Encryptor with a CCM backend.
