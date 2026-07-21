@@ -16,30 +16,56 @@ namespace BTHome
  * layout, counter handling) but contains no cipher implementation itself.
  * Implementations must perform AES-128-CCM with a 13-byte nonce and a 4-byte
  * tag, no additional authenticated data (see bthome_crypto_mbedtls.h for a
- * ready-made adapter).
+ * ready-made adapter). Backends needing state can keep it internally.
  *
- * @param ctx        Opaque user context passed through by Encryptor.
  * @param key        16-byte AES key.
  * @param nonce      13-byte CCM nonce.
- * @param plaintext  Input bytes to encrypt (may alias @p ciphertext).
+ * @param plaintext  Input bytes to encrypt.
  * @param length     Number of plaintext/ciphertext bytes.
  * @param ciphertext Output buffer for @p length encrypted bytes.
  * @param mic        Output buffer for the 4-byte message integrity check.
  * @return true on success, false on any backend failure.
  */
-using CcmEncryptFn = bool (*)(void *ctx,
-                              const std::uint8_t *key,
+using CcmEncryptFn = bool (*)(const std::uint8_t *key,
                               const std::uint8_t *nonce,
                               const std::uint8_t *plaintext,
                               std::size_t length,
                               std::uint8_t *ciphertext,
                               std::uint8_t *mic);
 
+class Encryptor;
+
+template <std::size_t AdvCapacity>
+class EncryptedPacket;
+
+/**
+ * @brief Build an encrypted raw BLE advertising payload for BTHome.
+ *
+ * Output layout: [Flags AD][len][0x16][UUID][device-info][ciphertext][counter][MIC][optional Name AD].
+ * On success the Encryptor's counter has been consumed and incremented.
+ *
+ * @tparam AdvCapacity Capacity parameter of the input EncryptedPacket.
+ * @param packet Source encrypted BTHome packet (plaintext measurements inside).
+ * @param encryptor Encryption material; counter is consumed on success.
+ * @param out Destination byte buffer for the final raw advertising payload.
+ * @param out_capacity Capacity of @p out in bytes.
+ * @param local_name Optional local name; pass nullptr to omit a name AD element.
+ * @param complete_local_name true for AD type 0x09 (Complete Local Name), false for 0x08 (Shortened Local Name).
+ * @return Payload size in bytes on success, or -1 on error (no counter is consumed on error).
+ */
+template <std::size_t AdvCapacity>
+int build_encrypted_advertising(const EncryptedPacket<AdvCapacity> &packet,
+                                Encryptor &encryptor,
+                                std::uint8_t *out,
+                                std::size_t out_capacity,
+                                const char *local_name = nullptr,
+                                bool complete_local_name = true);
+
 /**
  * @brief Holds the encryption material and produces BTHome v2 ciphertexts.
  *
  * The counter is owned and auto-incremented by this class: every successful
- * encrypt() consumes exactly one counter value. This makes CCM nonce reuse -
+ * build consumes exactly one counter value. This makes CCM nonce reuse -
  * the one catastrophic failure mode - structurally impossible as long as one
  * Encryptor instance is used per key. Restore the counter after reboot via
  * setCounter() (persist counter() with a safety margin); receivers reject
@@ -58,9 +84,8 @@ public:
     /**
      * @brief Constructs an Encryptor with a CCM backend.
      * @param fn Backend callback performing AES-128-CCM.
-     * @param ctx Opaque pointer passed to every backend call (may be nullptr).
      */
-    explicit Encryptor(CcmEncryptFn fn, void *ctx = nullptr) : m_fn(fn), m_ctx(ctx) {}
+    explicit Encryptor(CcmEncryptFn fn) : m_fn(fn) {}
 
     /**
      * @brief Sets the 16-byte AES key.
@@ -104,6 +129,14 @@ public:
         return m_counter;
     }
 
+private:
+    // Only build_encrypted_advertising drives the encryption; keeping this
+    // private keeps the multi-parameter call out of the public API.
+    template <std::size_t AdvCapacity>
+    friend int build_encrypted_advertising(const EncryptedPacket<AdvCapacity> &,
+                                           Encryptor &, std::uint8_t *, std::size_t,
+                                           const char *, bool);
+
     /**
      * @brief Encrypts one BTHome measurement section and emits counter + MIC.
      *
@@ -113,7 +146,7 @@ public:
      * @param device_info Device-information byte exactly as transmitted (encrypted bit set).
      * @param plaintext   Measurement bytes to encrypt.
      * @param length      Number of plaintext bytes.
-     * @param ciphertext  Output buffer for @p length encrypted bytes (may alias @p plaintext).
+     * @param ciphertext  Output buffer for @p length encrypted bytes.
      * @param counter_out Output buffer for the 4-byte little-endian counter.
      * @param mic_out     Output buffer for the 4-byte MIC.
      * @return true on success, false if no backend is set or the backend fails.
@@ -145,7 +178,7 @@ public:
         nonce[p++] = static_cast<std::uint8_t>((m_counter >> 16) & 0xFFu);
         nonce[p++] = static_cast<std::uint8_t>((m_counter >> 24) & 0xFFu);
 
-        if (!m_fn(m_ctx, m_key, nonce, plaintext, length, ciphertext, mic_out))
+        if (!m_fn(m_key, nonce, plaintext, length, ciphertext, mic_out))
         {
             return false;
         }
@@ -160,9 +193,7 @@ public:
         return true;
     }
 
-private:
     CcmEncryptFn m_fn = nullptr;
-    void *m_ctx = nullptr;
     std::uint8_t m_key[kKeyBytes] = {};
     std::uint8_t m_mac[kMacBytes] = {};
     std::uint32_t m_counter = 0;
@@ -247,28 +278,13 @@ private:
     Inner m_packet;
 };
 
-/**
- * @brief Build an encrypted raw BLE advertising payload for BTHome.
- *
- * Output layout: [Flags AD][len][0x16][UUID][device-info][ciphertext][counter][MIC][optional Name AD].
- * On success the Encryptor's counter has been consumed and incremented.
- *
- * @tparam AdvCapacity Capacity parameter of the input EncryptedPacket.
- * @param packet Source encrypted BTHome packet (plaintext measurements inside).
- * @param encryptor Encryption material; counter is consumed on success.
- * @param out Destination byte buffer for the final raw advertising payload.
- * @param out_capacity Capacity of @p out in bytes.
- * @param local_name Optional local name; pass nullptr to omit a name AD element.
- * @param complete_local_name true for AD type 0x09 (Complete Local Name), false for 0x08 (Shortened Local Name).
- * @return Payload size in bytes on success, or -1 on error (no counter is consumed on error).
- */
 template <std::size_t AdvCapacity>
 int build_encrypted_advertising(const EncryptedPacket<AdvCapacity> &packet,
                                 Encryptor &encryptor,
                                 std::uint8_t *out,
                                 std::size_t out_capacity,
-                                const char *local_name = nullptr,
-                                bool complete_local_name = true)
+                                const char *local_name,
+                                bool complete_local_name)
 {
     constexpr std::size_t kFlagsBytes = 3; // 02 01 06
     constexpr std::size_t kHeaderBytes = ServiceDataHeader::kByteCount;

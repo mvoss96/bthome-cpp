@@ -16,18 +16,15 @@ namespace BTHome
  *
  * Usage: BTHome::Encryptor encryptor(&BTHome::mbedtls_ccm_backend);
  *
- * @param ctx Unused; the adapter is stateless.
  * @return true on success, false on any mbedtls error.
  */
-inline bool mbedtls_ccm_backend(void *ctx,
-                                const std::uint8_t *key,
+inline bool mbedtls_ccm_backend(const std::uint8_t *key,
                                 const std::uint8_t *nonce,
                                 const std::uint8_t *plaintext,
                                 std::size_t length,
                                 std::uint8_t *ciphertext,
                                 std::uint8_t *mic)
 {
-    (void) ctx;
     mbedtls_ccm_context ccm;
     mbedtls_ccm_init(&ccm);
     const bool ok =

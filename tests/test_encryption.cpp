@@ -186,7 +186,7 @@ static void test_capacity_accounting()
     expect_true("capacity: full packet builds into 31 bytes", size > 0 && size <= 31);
 }
 
-static bool failing_backend(void *, const std::uint8_t *, const std::uint8_t *,
+static bool failing_backend(const std::uint8_t *, const std::uint8_t *,
                             const std::uint8_t *, std::size_t, std::uint8_t *, std::uint8_t *)
 {
     return false;
