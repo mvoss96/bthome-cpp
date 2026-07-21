@@ -45,12 +45,14 @@ jobs:
       - name: Install PlatformIO
         run: pip install platformio
       - name: Build example
+        # The Arduino core's default is gnu++11; the library needs C++17.
         run: >
           pio ci examples/${{ matrix.example }}
           --board esp32dev
           --project-option="framework=arduino"
           --project-option="lib_deps=h2zero/NimBLE-Arduino"
-          --project-option="build_flags=-I${{ github.workspace }}/src -Wall -Wextra"
+          --project-option="build_unflags=-std=gnu++11"
+          --project-option="build_flags=-std=gnu++17 -I${{ github.workspace }}/src -Wall -Wextra"
 
   esp-idf:
     runs-on: ubuntu-latest
@@ -89,10 +91,15 @@ jobs:
           sudo apt-get update && sudo apt-get install -y ninja-build gperf device-tree-compiler
           pip install west
       - name: Set up Zephyr workspace
+        # Explicit tag fetch: `git clone --branch <tag> --depth 1` mis-resolves
+        # Zephyr's annotated release tags on the runner's git and silently
+        # checks out the wrong commit.
         run: |
           if [ ! -d zephyr-ws/.west ]; then
             mkdir -p zephyr-ws && cd zephyr-ws
-            git clone --depth 1 --branch $ZEPHYR_VERSION https://github.com/zephyrproject-rtos/zephyr
+            git init -q zephyr
+            git -C zephyr fetch -q --depth 1 https://github.com/zephyrproject-rtos/zephyr refs/tags/$ZEPHYR_VERSION
+            git -C zephyr checkout -q FETCH_HEAD
             west init -l zephyr
             west update --narrow -o=--depth=1 cmsis cmsis_6 hal_nordic mbedtls
           fi
@@ -122,7 +129,10 @@ jobs:
           path: ncs-ws
           key: ncs-${{ env.NCS_VERSION }}
       - name: Set up NCS workspace
+        # The toolchain image provides west only through its entrypoint
+        # environment, which Actions-injected shells bypass.
         run: |
+          python3 -m pip install --quiet west
           if [ ! -d ncs-ws/.west ]; then
             mkdir -p ncs-ws && cd ncs-ws
             git clone --depth 1 --branch $NCS_VERSION https://github.com/nrfconnect/sdk-nrf nrf
