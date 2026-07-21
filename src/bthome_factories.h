@@ -1,6 +1,10 @@
 ﻿#pragma once
 
 #include <cstdint>
+// <string.h> instead of <cstring>: Zephyr's minimal C++ library ships no
+// C++ wrapper headers (only cstddef/cstdint/new), but the C header exists on
+// every supported libc. Calls are therefore unqualified (memcpy, not std::memcpy).
+#include <string.h>
 
 #include "bthome_defs.h"
 #include "bthome_encoding.h"
@@ -74,13 +78,16 @@ namespace BTHome
     {
         VarMeasurement m;
         m.object_id = static_cast<std::uint8_t>(SensorObjectId::Text);
-        std::size_t n = 0;
-        while (s != nullptr && s[n] != '\0' && n < VarMeasurement::kMaxBytes)
+        if (s != nullptr)
         {
-            m.data[n] = static_cast<std::uint8_t>(s[n]);
-            ++n;
+            std::size_t n = strlen(s);
+            if (n > VarMeasurement::kMaxBytes)
+            {
+                n = VarMeasurement::kMaxBytes;
+            }
+            memcpy(m.data, s, n);
+            m.len = static_cast<std::uint8_t>(n);
         }
-        m.len = static_cast<std::uint8_t>(n);
         return m;
     }
 
@@ -94,10 +101,7 @@ namespace BTHome
             {
                 count = VarMeasurement::kMaxBytes;
             }
-            for (std::size_t i = 0; i < count; ++i)
-            {
-                m.data[i] = bytes[i];
-            }
+            memcpy(m.data, bytes, count);
             m.len = static_cast<std::uint8_t>(count);
         }
         return m;

@@ -2,6 +2,9 @@
 
 #include <cstddef>
 #include <cstdint>
+// <string.h> instead of <cstring>: Zephyr's minimal C++ library ships no
+// C++ wrapper headers (only cstddef/cstdint/new), but the C header exists on
+// every supported libc. Calls are therefore unqualified (memcpy, not std::memcpy).
 #include <string.h>
 
 #include "bthome_packet.h"
@@ -56,7 +59,7 @@ int build_advertising(const Packet<PacketCapacity> &packet,
     {
         out[p++] = static_cast<std::uint8_t>(1 + local_name_len); // length of Local Name AD
         out[p++] = complete_local_name ? 0x09 : 0x08;             // AD type: Complete or Shortened Local Name
-        memcpy(out + p, local_name, local_name_len);              // Copy local name
+        memcpy(out + p, local_name, local_name_len);         // Copy local name
         p += local_name_len;
     }
 

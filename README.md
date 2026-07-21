@@ -13,6 +13,7 @@ Dependency-free C++17 BTHome v2 payload builder.
 1. BTHome service-data AD element via `BTHome::Packet<Capacity>`.
 2. Full raw advertising payload (Flags + BTHome service data) via `BTHome::build_advertising(...)`.
 3. All BTHome v2 object types, including variable-length Text (0x53) and Raw (0x54) via `BTHome::text(...)` / `BTHome::raw(...)`.
+4. AES-CCM encrypted payloads via `BTHome::EncryptedPacket<Capacity>` + `BTHome::build_encrypted_advertising(...)` with a pluggable cipher backend.
 
 ## Install
 
@@ -103,6 +104,47 @@ Result format:
 
 `[Flags AD][BTHome Service Data AD][optional Local Name AD]`
 
+## Encryption (AES-CCM)
+
+The library implements the BTHome v2 encryption scheme (nonce construction,
+counter handling, payload layout) but stays dependency-free: the AES-128-CCM
+primitive is supplied as a callback. Two ready-made adapters ship as separate
+headers (include the one your platform provides):
+
+- `bthome_crypto_mbedtls.h` — [mbedtls](https://github.com/Mbed-TLS/mbedtls);
+  bundled with ESP-IDF and the ESP32 Arduino core, on desktop link
+  `-lmbedcrypto`.
+- `bthome_crypto_psa.h` — PSA Crypto API; vanilla Zephyr (mbedtls-backed),
+  nRF Connect SDK (Oberon/CryptoCell — the legacy mbedtls API is deprecated
+  there), and TF-M environments.
+
+Both adapters are tested against the official spec vector and produce
+byte-identical output.
+
+```cpp
+#include "bthome.h"
+#include "bthome_crypto_mbedtls.h"
+
+// EncryptedPacket<28> reserves the 8-byte overhead (counter + MIC) internally:
+// size() already includes it, so fill logic can never overflow the advertisement.
+BTHome::EncryptedPacket<28> packet;
+packet.add(BTHome::temperature(22.4f));
+
+BTHome::Encryptor encryptor(&BTHome::mbedtls_ccm_backend);
+encryptor.setKey(key);  // 16 bytes, shared with Home Assistant
+encryptor.setMac(mac);  // the MAC your BLE stack advertises with
+encryptor.setCounter(restored_counter);  // restore after reboot!
+
+std::uint8_t adv[31] = {};
+int n = BTHome::build_encrypted_advertising(packet, encryptor, adv, sizeof(adv));
+```
+
+The counter is owned by the `Encryptor` and consumed exactly once per
+successful build, so CCM nonce reuse is structurally impossible. It must
+survive reboots: persist `encryptor.counter()` periodically and restore it
+with a safety margin via `setCounter()` — receivers reject non-increasing
+counters as replays. Encryption costs 8 bytes of advertisement budget.
+
 ## Local checks
 
 Build and run host tests from project root:
@@ -119,9 +161,13 @@ Expected output ends with:
 ## Examples
 
 - Arduino NimBLE: `examples/arduino_nimble/arduino_nimble.ino`
+- Arduino NimBLE encrypted (MAC + Preferences counter): `examples/arduino_nimble_encrypted/arduino_nimble_encrypted.ino`
 - ESP-IDF: `examples/esp_idf/main/main.cpp`
+- ESP-IDF encrypted (MAC + NVS counter persistence): `examples/esp_idf_encrypted/main/main.cpp`
 - Generic C++: `examples/generic/main.cpp`
+- Generic encrypted (prints the official spec vector): `examples/generic_encrypted/main.cpp`
 - Zephyr: `examples/zephyr/src/main.cpp`
+- Zephyr encrypted (PSA Crypto backend, MAC byte-order handling): `examples/zephyr_encrypted/src/main.cpp`
 
 ## Notes
 

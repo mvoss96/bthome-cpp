@@ -2,6 +2,10 @@
 
 #include <cstddef>
 #include <cstdint>
+// <string.h> instead of <cstring>: Zephyr's minimal C++ library ships no
+// C++ wrapper headers (only cstddef/cstdint/new), but the C header exists on
+// every supported libc. Calls are therefore unqualified (memcpy, not std::memcpy).
+#include <string.h>
 
 #include "bthome_defs.h"
 
@@ -152,11 +156,8 @@ private:
         }
         const std::size_t pos = (k == m_count) ? m_size : m_offsets[k];
 
-        // Shift the buffer tail up by `need` bytes (backwards, regions overlap).
-        for (std::size_t i = m_size; i > pos; --i)
-        {
-            m_buf[i + need - 1] = m_buf[i - 1];
-        }
+        // Shift the buffer tail up by `need` bytes (memmove: regions overlap).
+        memmove(m_buf + pos + need, m_buf + pos, m_size - pos);
 
         // Shift the offsets of the moved entries and record the new one.
         for (std::size_t j = m_count; j > k; --j)
@@ -173,10 +174,7 @@ private:
         {
             m_buf[p++] = static_cast<std::uint8_t>(vlen);
         }
-        for (std::size_t i = 0; i < vlen; ++i)
-        {
-            m_buf[p + i] = value[i];
-        }
+        memcpy(m_buf + p, value, vlen);
         m_size += need;
         m_buf[0] = static_cast<std::uint8_t>(m_size - 1);
         return true;
