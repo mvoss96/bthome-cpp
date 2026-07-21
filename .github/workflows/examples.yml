@@ -28,33 +28,33 @@ env:
 
 jobs:
   arduino:
+    # arduino-cli is the Arduino IDE's build engine, so this job tests the
+    # authentic Arduino path: the repo installed as a library (src/ layout via
+    # library.properties) with Espressif's current esp32 core from the board
+    # manager index.
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         example: [arduino_nimble, arduino_nimble_encrypted]
+    env:
+      ESP32_INDEX: https://espressif.github.io/arduino-esp32/package_esp32_index.json
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
+      - uses: arduino/setup-arduino-cli@v2
       - uses: actions/cache@v4
         with:
-          path: ~/.platformio
-          key: pio-examples-${{ runner.os }}
-      - name: Install PlatformIO
-        run: pip install platformio
+          path: ~/.arduino15
+          key: arduino-cli-esp32-${{ runner.os }}
+      - name: Install esp32 core and libraries
+        run: |
+          arduino-cli core update-index --additional-urls "$ESP32_INDEX"
+          arduino-cli core install esp32:esp32 --additional-urls "$ESP32_INDEX"
+          arduino-cli lib install NimBLE-Arduino
+          mkdir -p ~/Arduino/libraries
+          cp -r "$GITHUB_WORKSPACE" ~/Arduino/libraries/bthome-cpp
       - name: Build example
-        # pioarduino (community platform, used by ESPHome) ships the current
-        # Arduino core 3.x. The official espressif32 platform is frozen at
-        # core 2.0.17, whose gnu++11 default cannot build a C++17 library.
-        run: >
-          pio ci examples/${{ matrix.example }}
-          --board esp32dev
-          --project-option="platform=https://github.com/pioarduino/platform-espressif32/releases/download/stable/platform-espressif32.zip"
-          --project-option="framework=arduino"
-          --project-option="lib_deps=h2zero/NimBLE-Arduino"
-          --project-option="build_flags=-I${{ github.workspace }}/src -Wall -Wextra"
+        run: arduino-cli compile --fqbn esp32:esp32:esp32 --warnings more examples/${{ matrix.example }}
 
   esp-idf:
     runs-on: ubuntu-latest
