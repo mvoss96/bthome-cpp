@@ -85,7 +85,7 @@ jobs:
           path: |
             zephyr-ws
             ~/zephyr-sdk
-          key: zephyr-${{ env.ZEPHYR_VERSION }}-sdk-${{ env.ZEPHYR_SDK_VERSION }}
+          key: zephyr-${{ env.ZEPHYR_VERSION }}-sdk-${{ env.ZEPHYR_SDK_VERSION }}-v2
       - name: Install host dependencies
         run: |
           sudo apt-get update && sudo apt-get install -y ninja-build gperf device-tree-compiler
@@ -127,11 +127,13 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: ncs-ws
-          key: ncs-${{ env.NCS_VERSION }}
+          key: ncs-${{ env.NCS_VERSION }}-v2
       - name: Set up NCS workspace
         # The toolchain image provides west only through its entrypoint
-        # environment, which Actions-injected shells bypass.
+        # environment, which Actions-injected shells bypass - and its system
+        # python has no pip either.
         run: |
+          apt-get update -qq && apt-get install -y -qq python3-pip
           python3 -m pip install --quiet west
           if [ ! -d ncs-ws/.west ]; then
             mkdir -p ncs-ws && cd ncs-ws
