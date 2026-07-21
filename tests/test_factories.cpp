@@ -5,13 +5,7 @@
 //   g++ -std=c++17 -fno-exceptions -fno-rtti -Wall -Wextra -I .\src .\tests\test_factories.cpp -o .\build\test_factories.exe
 //   .\build\test_factories.exe
 #include "bthome.h"
-
-#include <cstddef>
-#include <cstdint>
-#include <cstdio>
-#include <cstring>
-
-static int g_failures = 0;
+#include "test_utils.h"
 
 struct Case
 {
@@ -170,6 +164,5 @@ int main()
         ++g_failures;
     }
 
-    std::printf("\n%s\n", g_failures == 0 ? "ALL TESTS PASSED" : "SOME TESTS FAILED");
-    return g_failures == 0 ? 0 : 1;
+    return test_summary();
 }
