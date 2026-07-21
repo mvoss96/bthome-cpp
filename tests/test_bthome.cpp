@@ -2,47 +2,7 @@
 //   g++ -std=c++17 -fno-exceptions -fno-rtti -Wall -Wextra -I .\src .\tests\test_bthome.cpp -o .\build\test_bthome.exe
 //   .\build\test_bthome.exe
 #include "bthome.h"
-
-#include <cstddef>
-#include <cstdint>
-#include <cstdio>
-#include <cstring>
-
-static int g_failures = 0;
-
-static void expect_true(const char *name, bool cond)
-{
-    std::printf("[%s] %s\n", cond ? "PASS" : "FAIL", name);
-    if (!cond)
-    {
-        ++g_failures;
-    }
-}
-
-static void expect_bytes(const char *name,
-                         const std::uint8_t *got,
-                         std::size_t got_len,
-                         const std::uint8_t *want,
-                         std::size_t want_len)
-{
-    const bool ok = (got_len == want_len) && (std::memcmp(got, want, want_len) == 0);
-    std::printf("[%s] %s\n  got : ", ok ? "PASS" : "FAIL", name);
-    for (std::size_t i = 0; i < got_len; ++i)
-    {
-        std::printf("%02X ", got[i]);
-    }
-    std::printf("\n  want: ");
-    for (std::size_t i = 0; i < want_len; ++i)
-    {
-        std::printf("%02X ", want[i]);
-    }
-    std::printf("\n");
-
-    if (!ok)
-    {
-        ++g_failures;
-    }
-}
+#include "test_utils.h"
 
 static void test_header_and_basic_packet()
 {
@@ -693,6 +653,5 @@ int main()
     test_accessor_idempotence();
     test_text_and_raw();
 
-    std::printf("\n%s\n", g_failures == 0 ? "ALL TESTS PASSED" : "SOME TESTS FAILED");
-    return g_failures == 0 ? 0 : 1;
+    return test_summary();
 }
