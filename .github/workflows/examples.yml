@@ -56,6 +56,36 @@ jobs:
       - name: Build example
         run: arduino-cli compile --fqbn esp32:esp32:esp32 --warnings more examples/${{ matrix.example }}
 
+  platformio:
+    # Covers the PlatformIO consumer path (the README's lib_deps install and
+    # how esphome-bthome-broadcaster pulls this library), using pioarduino -
+    # the maintained community platform with Arduino core 3.x that ESPHome
+    # builds on. The arduino job above covers the Arduino-IDE path instead.
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        example: [arduino_nimble, arduino_nimble_encrypted]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-examples-${{ runner.os }}
+      - name: Install PlatformIO
+        run: pip install platformio
+      - name: Build example
+        run: >
+          pio ci examples/${{ matrix.example }}
+          --board esp32dev
+          --project-option="platform=https://github.com/pioarduino/platform-espressif32/releases/download/stable/platform-espressif32.zip"
+          --project-option="framework=arduino"
+          --project-option="lib_deps=h2zero/NimBLE-Arduino"
+          --project-option="build_flags=-I${{ github.workspace }}/src -Wall -Wextra"
+
   esp-idf:
     runs-on: ubuntu-latest
     strategy:
@@ -109,15 +139,19 @@ jobs:
           fi
           pip install -r zephyr-ws/zephyr/scripts/requirements-base.txt
       - name: Install Zephyr SDK
+        # The CMake package registration (~/.cmake) is NOT in the cache, so
+        # setup.sh -c must run on every fresh runner, cached SDK or not.
         run: |
           if [ ! -d ~/zephyr-sdk/zephyr-sdk-$ZEPHYR_SDK_VERSION ]; then
             mkdir -p ~/zephyr-sdk && cd ~/zephyr-sdk
             wget -q https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v$ZEPHYR_SDK_VERSION/zephyr-sdk-${ZEPHYR_SDK_VERSION}_linux-x86_64_minimal.tar.xz
             tar xf zephyr-sdk-${ZEPHYR_SDK_VERSION}_linux-x86_64_minimal.tar.xz
-            cd zephyr-sdk-$ZEPHYR_SDK_VERSION && ./setup.sh -t arm-zephyr-eabi -h -c
+            ~/zephyr-sdk/zephyr-sdk-$ZEPHYR_SDK_VERSION/setup.sh -t arm-zephyr-eabi -h
           fi
+          ~/zephyr-sdk/zephyr-sdk-$ZEPHYR_SDK_VERSION/setup.sh -c
       - name: Build example
         run: |
+          export ZEPHYR_SDK_INSTALL_DIR=$HOME/zephyr-sdk/zephyr-sdk-$ZEPHYR_SDK_VERSION
           cd zephyr-ws
           west build -p always -b nrf52840dk/nrf52840 "$GITHUB_WORKSPACE/examples/${{ matrix.example }}"
 
@@ -163,14 +197,18 @@ jobs:
           fi
           pip install -r ncs-ws/zephyr/scripts/requirements-base.txt
       - name: Install Zephyr SDK
+        # The CMake package registration (~/.cmake) is NOT in the cache, so
+        # setup.sh -c must run on every fresh runner, cached SDK or not.
         run: |
           if [ ! -d ~/zephyr-sdk/zephyr-sdk-$ZEPHYR_SDK_VERSION ]; then
             mkdir -p ~/zephyr-sdk && cd ~/zephyr-sdk
             wget -q https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v$ZEPHYR_SDK_VERSION/zephyr-sdk-${ZEPHYR_SDK_VERSION}_linux-x86_64_minimal.tar.xz
             tar xf zephyr-sdk-${ZEPHYR_SDK_VERSION}_linux-x86_64_minimal.tar.xz
-            cd zephyr-sdk-$ZEPHYR_SDK_VERSION && ./setup.sh -t arm-zephyr-eabi -h -c
+            ~/zephyr-sdk/zephyr-sdk-$ZEPHYR_SDK_VERSION/setup.sh -t arm-zephyr-eabi -h
           fi
+          ~/zephyr-sdk/zephyr-sdk-$ZEPHYR_SDK_VERSION/setup.sh -c
       - name: Build encrypted example
         run: |
+          export ZEPHYR_SDK_INSTALL_DIR=$HOME/zephyr-sdk/zephyr-sdk-$ZEPHYR_SDK_VERSION
           cd ncs-ws
           west build -p always -b nrf52840dk/nrf52840 "$GITHUB_WORKSPACE/examples/zephyr_encrypted"
