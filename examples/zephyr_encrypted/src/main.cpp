@@ -1,11 +1,14 @@
 // Zephyr example: advertise an AES-CCM encrypted BTHome payload.
 //
-// Uses Zephyr's bundled mbedtls as the cipher backend (see prj.conf).
+// Uses the PSA Crypto backend (see prj.conf): on vanilla Zephyr PSA is backed
+// by mbedtls in software, but the SAME code runs unchanged on the nRF Connect
+// SDK, where PSA routes to the Oberon library or CryptoCell hardware instead
+// (the legacy mbedtls_ccm_* API is deprecated there).
 // Note the MAC byte order: bt_id_get() returns the address with the LEAST
 // significant byte first (val[0] = last octet of the printed address), while
 // the BTHome nonce wants display order - so the bytes must be reversed.
 #include "bthome.h"
-#include "bthome_crypto_mbedtls.h"
+#include "bthome_crypto_psa.h"
 
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/kernel.h>
@@ -15,7 +18,7 @@ static const std::uint8_t kKey[BTHome::Encryptor::kKeyBytes] = {
     0x23, 0x1D, 0x39, 0xC1, 0xD7, 0xCC, 0x1A, 0xB1,
     0xAE, 0xE2, 0x24, 0xCD, 0x09, 0x6D, 0xB9, 0x32};
 
-static BTHome::Encryptor encryptor(&BTHome::mbedtls_ccm_backend);
+static BTHome::Encryptor encryptor(&BTHome::psa_ccm_backend);
 
 // Built once at startup; the bytes stay valid because the buffer is static.
 static std::uint8_t adv[31];

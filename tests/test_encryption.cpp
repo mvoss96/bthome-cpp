@@ -4,6 +4,7 @@
 //   ./build/test_encryption
 #include "bthome.h"
 #include "bthome_crypto_mbedtls.h"
+#include "bthome_crypto_psa.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -88,6 +89,34 @@ static void test_spec_vector()
     expect_bytes("spec: full advertisement", out, static_cast<std::size_t>(size > 0 ? size : 0),
                  want_adv, sizeof(want_adv));
     expect_true("spec: counter consumed once", encryptor.counter() == kSpecCounter + 1);
+}
+
+static void test_spec_vector_psa_backend()
+{
+    // Tests: The identical spec vector through the PSA Crypto adapter.
+    // Expects: Byte-identical output to the mbedtls adapter - both backends
+    // must be interchangeable.
+    BTHome::EncryptedPacket<28> packet;
+    packet.add(BTHome::temperature(25.06f));
+    packet.add(BTHome::humidity(50.55f));
+
+    BTHome::Encryptor encryptor(&BTHome::psa_ccm_backend);
+    encryptor.setKey(kSpecKey);
+    encryptor.setMac(kSpecMac);
+    encryptor.setCounter(kSpecCounter);
+
+    std::uint8_t out[31] = {};
+    const int size = BTHome::build_encrypted_advertising(packet, encryptor, out, sizeof(out));
+    const std::uint8_t want_adv[] = {
+        0x02, 0x01, 0x06,
+        0x12, 0x16, 0xD2, 0xFC, 0x41,
+        0xE4, 0x45, 0xF3, 0xC9, 0x96, 0x2B,
+        0x33, 0x22, 0x11, 0x00,
+        0x6C, 0x7C, 0x45, 0x19};
+    expect_true("psa: build succeeded", size == static_cast<int>(sizeof(want_adv)));
+    expect_bytes("psa: full advertisement", out, static_cast<std::size_t>(size > 0 ? size : 0),
+                 want_adv, sizeof(want_adv));
+    expect_true("psa: counter consumed once", encryptor.counter() == kSpecCounter + 1);
 }
 
 static void test_counter_makes_ciphertext_unique()
@@ -227,6 +256,7 @@ static void test_error_paths()
 int main()
 {
     test_spec_vector();
+    test_spec_vector_psa_backend();
     test_counter_makes_ciphertext_unique();
     test_trigger_flag_in_nonce();
     test_capacity_accounting();

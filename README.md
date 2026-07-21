@@ -108,10 +108,18 @@ Result format:
 
 The library implements the BTHome v2 encryption scheme (nonce construction,
 counter handling, payload layout) but stays dependency-free: the AES-128-CCM
-primitive is supplied as a callback. A ready-made
-[mbedtls](https://github.com/Mbed-TLS/mbedtls) adapter ships in
-`bthome_crypto_mbedtls.h` (include it separately — ESP-IDF provides mbedtls
-out of the box; on desktop link `-lmbedcrypto`).
+primitive is supplied as a callback. Two ready-made adapters ship as separate
+headers (include the one your platform provides):
+
+- `bthome_crypto_mbedtls.h` — [mbedtls](https://github.com/Mbed-TLS/mbedtls);
+  bundled with ESP-IDF and the ESP32 Arduino core, on desktop link
+  `-lmbedcrypto`.
+- `bthome_crypto_psa.h` — PSA Crypto API; vanilla Zephyr (mbedtls-backed),
+  nRF Connect SDK (Oberon/CryptoCell — the legacy mbedtls API is deprecated
+  there), and TF-M environments.
+
+Both adapters are tested against the official spec vector and produce
+byte-identical output.
 
 ```cpp
 #include "bthome.h"
@@ -159,7 +167,7 @@ Expected output ends with:
 - Generic C++: `examples/generic/main.cpp`
 - Generic encrypted (prints the official spec vector): `examples/generic_encrypted/main.cpp`
 - Zephyr: `examples/zephyr/src/main.cpp`
-- Zephyr encrypted (mbedtls via prj.conf, MAC byte-order handling): `examples/zephyr_encrypted/src/main.cpp`
+- Zephyr encrypted (PSA Crypto backend, MAC byte-order handling): `examples/zephyr_encrypted/src/main.cpp`
 
 ## Notes
 
