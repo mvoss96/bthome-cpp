@@ -96,12 +96,14 @@ jobs:
         # checks out the wrong commit.
         run: |
           if [ ! -d zephyr-ws/.west ]; then
-            mkdir -p zephyr-ws && cd zephyr-ws
-            git init -q zephyr
-            git -C zephyr fetch -q --depth 1 https://github.com/zephyrproject-rtos/zephyr refs/tags/$ZEPHYR_VERSION
-            git -C zephyr checkout -q FETCH_HEAD
-            west init -l zephyr
-            west update --narrow -o=--depth=1 cmsis cmsis_6 hal_nordic mbedtls
+            (
+              mkdir -p zephyr-ws && cd zephyr-ws
+              git init -q zephyr
+              git -C zephyr fetch -q --depth 1 https://github.com/zephyrproject-rtos/zephyr refs/tags/$ZEPHYR_VERSION
+              git -C zephyr checkout -q FETCH_HEAD
+              west init -l zephyr
+              west update --narrow -o=--depth=1 cmsis cmsis_6 hal_nordic mbedtls
+            )
           fi
           pip install -r zephyr-ws/zephyr/scripts/requirements-base.txt
       - name: Install Zephyr SDK
@@ -127,14 +129,14 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: ncs-ws
-          key: ncs-${{ env.NCS_VERSION }}-v2
+          key: ncs-${{ env.NCS_VERSION }}-v3
       - name: Set up NCS workspace
         # The toolchain image provides west only through its entrypoint
         # environment, which Actions-injected shells bypass - and its system
         # python has no pip either.
         run: |
           apt-get update -qq && apt-get install -y -qq python3-pip
-          python3 -m pip install --quiet west
+          python3 -m pip install --quiet --break-system-packages west
           if [ ! -d ncs-ws/.west ]; then
             mkdir -p ncs-ws && cd ncs-ws
             git clone --depth 1 --branch $NCS_VERSION https://github.com/nrfconnect/sdk-nrf nrf
