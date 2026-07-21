@@ -1,0 +1,214 @@
+name: Examples
+
+# Compile-checks every embedded example against its real framework, so
+# examples cannot silently rot. Host examples are covered by ci.yml.
+# Paths-filtered: runs only when library code, examples or this workflow
+# change.
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - "src/**"
+      - "examples/**"
+      - ".github/workflows/examples.yml"
+  pull_request:
+    paths:
+      - "src/**"
+      - "examples/**"
+      - ".github/workflows/examples.yml"
+
+concurrency:
+  group: examples-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  ZEPHYR_VERSION: v4.1.0
+  ZEPHYR_SDK_VERSION: 0.17.0
+  NCS_VERSION: v3.2.0
+
+jobs:
+  arduino:
+    # arduino-cli is the Arduino IDE's build engine, so this job tests the
+    # authentic Arduino path: the repo installed as a library (src/ layout via
+    # library.properties) with Espressif's current esp32 core from the board
+    # manager index.
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        example: [arduino_nimble, arduino_nimble_encrypted]
+    env:
+      ESP32_INDEX: https://espressif.github.io/arduino-esp32/package_esp32_index.json
+    steps:
+      - uses: actions/checkout@v5
+      - uses: arduino/setup-arduino-cli@v2
+      - uses: actions/cache@v4
+        with:
+          path: ~/.arduino15
+          key: arduino-cli-esp32-${{ runner.os }}
+      - name: Install esp32 core and libraries
+        run: |
+          arduino-cli core update-index --additional-urls "$ESP32_INDEX"
+          arduino-cli core install esp32:esp32 --additional-urls "$ESP32_INDEX"
+          arduino-cli lib install NimBLE-Arduino
+          mkdir -p ~/Arduino/libraries
+          cp -r "$GITHUB_WORKSPACE" ~/Arduino/libraries/bthome-cpp
+      - name: Build example
+        run: arduino-cli compile --fqbn esp32:esp32:esp32 --warnings more examples/${{ matrix.example }}
+
+  platformio:
+    # Covers the PlatformIO consumer path (the README's lib_deps install and
+    # how esphome-bthome-broadcaster pulls this library), using pioarduino -
+    # the maintained community platform with Arduino core 3.x that ESPHome
+    # builds on. The arduino job above covers the Arduino-IDE path instead.
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        example: [arduino_nimble, arduino_nimble_encrypted]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-examples-${{ runner.os }}
+      - name: Install PlatformIO
+        run: pip install platformio
+      - name: Build example
+        run: >
+          pio ci examples/${{ matrix.example }}
+          --board esp32dev
+          --project-option="platform=https://github.com/pioarduino/platform-espressif32/releases/download/stable/platform-espressif32.zip"
+          --project-option="framework=arduino"
+          --project-option="lib_deps=h2zero/NimBLE-Arduino"
+          --project-option="build_flags=-I${{ github.workspace }}/src -Wall -Wextra"
+
+  esp-idf:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        example: [esp_idf, esp_idf_encrypted]
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build example
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v5.4
+          target: esp32
+          path: examples/${{ matrix.example }}
+
+  zephyr:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        example: [zephyr, zephyr_encrypted]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions/cache@v4
+        with:
+          path: |
+            zephyr-ws
+            ~/zephyr-sdk
+          key: zephyr-${{ env.ZEPHYR_VERSION }}-sdk-${{ env.ZEPHYR_SDK_VERSION }}-v2
+      - name: Install host dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y ninja-build gperf device-tree-compiler
+          pip install west
+      - name: Set up Zephyr workspace
+        # Explicit tag fetch: `git clone --branch <tag> --depth 1` mis-resolves
+        # Zephyr's annotated release tags on the runner's git and silently
+        # checks out the wrong commit.
+        run: |
+          if [ ! -d zephyr-ws/.west ]; then
+            (
+              mkdir -p zephyr-ws && cd zephyr-ws
+              git init -q zephyr
+              git -C zephyr fetch -q --depth 1 https://github.com/zephyrproject-rtos/zephyr refs/tags/$ZEPHYR_VERSION
+              git -C zephyr checkout -q FETCH_HEAD
+              west init -l zephyr
+              west update --narrow -o=--depth=1 cmsis cmsis_6 hal_nordic mbedtls
+            )
+          fi
+          pip install -r zephyr-ws/zephyr/scripts/requirements-base.txt
+      - name: Install Zephyr SDK
+        # The CMake package registration (~/.cmake) is NOT in the cache, so
+        # setup.sh -c must run on every fresh runner, cached SDK or not.
+        run: |
+          if [ ! -d ~/zephyr-sdk/zephyr-sdk-$ZEPHYR_SDK_VERSION ]; then
+            mkdir -p ~/zephyr-sdk && cd ~/zephyr-sdk
+            wget -q https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v$ZEPHYR_SDK_VERSION/zephyr-sdk-${ZEPHYR_SDK_VERSION}_linux-x86_64_minimal.tar.xz
+            tar xf zephyr-sdk-${ZEPHYR_SDK_VERSION}_linux-x86_64_minimal.tar.xz
+            ~/zephyr-sdk/zephyr-sdk-$ZEPHYR_SDK_VERSION/setup.sh -t arm-zephyr-eabi -h
+          fi
+          ~/zephyr-sdk/zephyr-sdk-$ZEPHYR_SDK_VERSION/setup.sh -c
+      - name: Build example
+        run: |
+          export ZEPHYR_SDK_INSTALL_DIR=$HOME/zephyr-sdk/zephyr-sdk-$ZEPHYR_SDK_VERSION
+          cd zephyr-ws
+          west build -p always -b nrf52840dk/nrf52840 "$GITHUB_WORKSPACE/examples/${{ matrix.example }}"
+
+  ncs:
+    # Same encrypted example against the nRF Connect SDK: proves the PSA
+    # adapter on Nordic's nrf_security stack (Oberon backend). Plain runner
+    # with the Zephyr SDK toolchain - Nordic's toolchain container exposes
+    # its tools only through the entrypoint env, which Actions bypasses.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ncs-ws
+            ~/zephyr-sdk
+          key: ncs-${{ env.NCS_VERSION }}-sdk-${{ env.ZEPHYR_SDK_VERSION }}-v4
+      - name: Install host dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y ninja-build gperf device-tree-compiler
+          pip install west
+      - name: Set up NCS workspace
+        run: |
+          if [ ! -d ncs-ws/.west ]; then
+            (
+              mkdir -p ncs-ws && cd ncs-ws
+              git clone --depth 1 --branch $NCS_VERSION https://github.com/nrfconnect/sdk-nrf nrf
+              west init -l nrf
+              west update --narrow -o=--depth=1 zephyr nrfxlib mbedtls oberon-psa-crypto bsim
+              # cmsis & hal_nordic are resolved via project imports, which west
+              # cannot update selectively (a plain `west update` would pull the
+              # multi-GB full module set) - clone them at their pinned revisions.
+              west list -f "{name} {path} {revision} {url}" cmsis cmsis_6 hal_nordic |
+              while read -r name path rev url; do
+                mkdir -p "$path" && git -C "$path" init -q
+                git -C "$path" fetch -q --depth 1 "$url" "$rev"
+                git -C "$path" checkout -q FETCH_HEAD
+              done
+            )
+          fi
+          pip install -r ncs-ws/zephyr/scripts/requirements-base.txt
+      - name: Install Zephyr SDK
+        # The CMake package registration (~/.cmake) is NOT in the cache, so
+        # setup.sh -c must run on every fresh runner, cached SDK or not.
+        run: |
+          if [ ! -d ~/zephyr-sdk/zephyr-sdk-$ZEPHYR_SDK_VERSION ]; then
+            mkdir -p ~/zephyr-sdk && cd ~/zephyr-sdk
+            wget -q https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v$ZEPHYR_SDK_VERSION/zephyr-sdk-${ZEPHYR_SDK_VERSION}_linux-x86_64_minimal.tar.xz
+            tar xf zephyr-sdk-${ZEPHYR_SDK_VERSION}_linux-x86_64_minimal.tar.xz
+            ~/zephyr-sdk/zephyr-sdk-$ZEPHYR_SDK_VERSION/setup.sh -t arm-zephyr-eabi -h
+          fi
+          ~/zephyr-sdk/zephyr-sdk-$ZEPHYR_SDK_VERSION/setup.sh -c
+      - name: Build encrypted example
+        run: |
+          export ZEPHYR_SDK_INSTALL_DIR=$HOME/zephyr-sdk/zephyr-sdk-$ZEPHYR_SDK_VERSION
+          cd ncs-ws
+          west build -p always -b nrf52840dk/nrf52840 "$GITHUB_WORKSPACE/examples/zephyr_encrypted"
