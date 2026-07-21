@@ -45,14 +45,16 @@ jobs:
       - name: Install PlatformIO
         run: pip install platformio
       - name: Build example
-        # The Arduino core's default is gnu++11; the library needs C++17.
+        # pioarduino (community platform, used by ESPHome) ships the current
+        # Arduino core 3.x. The official espressif32 platform is frozen at
+        # core 2.0.17, whose gnu++11 default cannot build a C++17 library.
         run: >
           pio ci examples/${{ matrix.example }}
           --board esp32dev
+          --project-option="platform=https://github.com/pioarduino/platform-espressif32/releases/download/stable/platform-espressif32.zip"
           --project-option="framework=arduino"
           --project-option="lib_deps=h2zero/NimBLE-Arduino"
-          --project-option="build_unflags=-std=gnu++11"
-          --project-option="build_flags=-std=gnu++17 -I${{ github.workspace }}/src -Wall -Wextra"
+          --project-option="build_flags=-I${{ github.workspace }}/src -Wall -Wextra"
 
   esp-idf:
     runs-on: ubuntu-latest
