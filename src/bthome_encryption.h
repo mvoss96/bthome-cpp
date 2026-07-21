@@ -2,6 +2,10 @@
 
 #include <cstddef>
 #include <cstdint>
+// <string.h> instead of <cstring>: Zephyr's minimal C++ library ships no
+// C++ wrapper headers (only cstddef/cstdint/new), but the C header exists on
+// every supported libc. Calls are therefore unqualified (memcpy, not std::memcpy).
+#include <string.h>
 
 #include "bthome_defs.h"
 #include "bthome_packet.h"
@@ -93,10 +97,7 @@ public:
      */
     void setKey(const std::uint8_t (&key)[kKeyBytes])
     {
-        for (std::size_t i = 0; i < kKeyBytes; ++i)
-        {
-            m_key[i] = key[i];
-        }
+        memcpy(m_key, key, kKeyBytes);
     }
 
     /**
@@ -105,10 +106,7 @@ public:
      */
     void setMac(const std::uint8_t (&mac)[kMacBytes])
     {
-        for (std::size_t i = 0; i < kMacBytes; ++i)
-        {
-            m_mac[i] = mac[i];
-        }
+        memcpy(m_mac, mac, kMacBytes);
     }
 
     /**
@@ -165,11 +163,8 @@ private:
 
         // Nonce: MAC(6) + UUID little-endian(2) + device-info(1) + counter little-endian(4).
         std::uint8_t nonce[kNonceBytes];
-        std::size_t p = 0;
-        for (std::size_t i = 0; i < kMacBytes; ++i)
-        {
-            nonce[p++] = m_mac[i];
-        }
+        memcpy(nonce, m_mac, kMacBytes);
+        std::size_t p = kMacBytes;
         nonce[p++] = static_cast<std::uint8_t>(kServiceUuid & 0xFFu);
         nonce[p++] = static_cast<std::uint8_t>(kServiceUuid >> 8);
         nonce[p++] = device_info;
@@ -183,11 +178,9 @@ private:
             return false;
         }
 
-        // Counter travels in clear text right after the ciphertext.
-        counter_out[0] = nonce[9];
-        counter_out[1] = nonce[10];
-        counter_out[2] = nonce[11];
-        counter_out[3] = nonce[12];
+        // Counter travels in clear text right after the ciphertext; copied from
+        // the nonce so both are guaranteed to hold identical bytes.
+        memcpy(counter_out, nonce + kNonceBytes - kCounterBytes, kCounterBytes);
 
         ++m_counter;
         return true;
@@ -293,14 +286,7 @@ int build_encrypted_advertising(const EncryptedPacket<AdvCapacity> &packet,
         return -1;
     }
 
-    std::size_t local_name_len = 0;
-    if (local_name != nullptr)
-    {
-        while (local_name[local_name_len] != '\0')
-        {
-            ++local_name_len;
-        }
-    }
+    const std::size_t local_name_len = (local_name != nullptr) ? strlen(local_name) : 0;
     if (local_name_len > 0xFE)
     {
         return -1;
@@ -320,10 +306,7 @@ int build_encrypted_advertising(const EncryptedPacket<AdvCapacity> &packet,
     // Header is copied from the inner packet; only the AD length byte grows
     // by the encryption overhead.
     const auto &inner = packet.inner();
-    for (std::size_t i = 0; i < kHeaderBytes; ++i)
-    {
-        out[kFlagsBytes + i] = inner.data()[i];
-    }
+    memcpy(out + kFlagsBytes, inner.data(), kHeaderBytes);
     out[kFlagsBytes] = static_cast<std::uint8_t>(ad_size - 1);
 
     const std::uint8_t device_info = inner.data()[kHeaderBytes - 1];
@@ -343,10 +326,7 @@ int build_encrypted_advertising(const EncryptedPacket<AdvCapacity> &packet,
     {
         out[p++] = static_cast<std::uint8_t>(1 + local_name_len); // length of Local Name AD
         out[p++] = complete_local_name ? 0x09 : 0x08;             // AD type: Complete or Shortened Local Name
-        for (std::size_t i = 0; i < local_name_len; ++i)
-        {
-            out[p + i] = static_cast<std::uint8_t>(local_name[i]);
-        }
+        memcpy(out + p, local_name, local_name_len);         // Copy local name
         p += local_name_len;
     }
 
