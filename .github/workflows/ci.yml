@@ -31,3 +31,26 @@ jobs:
           ./build/test_factories
           ./build/test_encryption
           ./build/demo_encrypted
+
+  interop:
+    # Independent oracle: every advertisement this library builds is decoded
+    # with bthome-ble - the parser Home Assistant runs - and must yield the
+    # values that went in, including decryption via bindkey. bthome-ble is
+    # deliberately unpinned: breakage against a new parser release is exactly
+    # the early warning this job exists for.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y libmbedtls-dev
+          pip install bthome-ble
+      - name: Build corpus generator
+        run: |
+          mkdir -p build
+          g++ -std=c++17 -fno-exceptions -fno-rtti -Wall -Wextra -Werror -I src tests/interop/generate_corpus.cpp -lmbedcrypto -o build/generate_corpus
+      - name: Check corpus against bthome-ble
+        run: ./build/generate_corpus | python tests/interop/check_with_bthome_ble.py

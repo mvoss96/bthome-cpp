@@ -179,6 +179,20 @@ Expected output ends with:
 
 `ALL TESTS PASSED`
 
+### Interop check against Home Assistant's parser
+
+`tests/interop/` cross-checks every factory, event and encrypted packet
+against [bthome-ble](https://github.com/Bluetooth-Devices/bthome-ble) — the
+parser Home Assistant uses. The C++ generator emits advertisements built via
+the public API; the Python checker decodes them with bthome-ble and asserts
+the values (and the bindkey decryption) round-trip. Runs in CI; locally:
+
+```bash
+g++ -std=c++17 -fno-exceptions -fno-rtti -Wall -Wextra -I src tests/interop/generate_corpus.cpp -lmbedcrypto -o build/generate_corpus
+pip install bthome-ble
+./build/generate_corpus | python3 tests/interop/check_with_bthome_ble.py
+```
+
 ## Examples
 
 - Arduino NimBLE: `examples/arduino_nimble/arduino_nimble.ino`
