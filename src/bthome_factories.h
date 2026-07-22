@@ -107,6 +107,46 @@ namespace BTHome
         return m;
     }
 
+    // Events. Receivers process an event only when the packet id changes, so
+    // the same event packet may be advertised repeatedly for reliability.
+    inline Measurement button_event(ButtonEventType e)
+    {
+        return detail::u8(EventObjectId::ButtonEvent, static_cast<std::uint8_t>(e));
+    }
+
+    // Value layout: [argument count][opcode][arguments...] - spec examples
+    // 3B0002 (toggle) and 3B010305 (step up 5 steps).
+    inline Measurement command_event(CommandEventType e, std::uint8_t steps = 1)
+    {
+        Measurement m;
+        m.object_id = static_cast<std::uint8_t>(EventObjectId::CommandEvent);
+        const bool has_steps = (e == CommandEventType::StepUp) || (e == CommandEventType::StepDown);
+        m.data[0] = has_steps ? 1 : 0;
+        m.data[1] = static_cast<std::uint8_t>(e);
+        m.len = 2;
+        if (has_steps)
+        {
+            m.data[2] = steps;
+            m.len = 3;
+        }
+        return m;
+    }
+
+    // None carries no step byte; rotate events carry the number of steps.
+    inline Measurement dimmer_event(DimmerEventType e, std::uint8_t steps = 1)
+    {
+        Measurement m;
+        m.object_id = static_cast<std::uint8_t>(EventObjectId::DimmerEvent);
+        m.data[0] = static_cast<std::uint8_t>(e);
+        m.len = 1;
+        if (e != DimmerEventType::None)
+        {
+            m.data[1] = steps;
+            m.len = 2;
+        }
+        return m;
+    }
+
     // Device objects
     inline Measurement device_type_id(std::uint16_t v) { return detail::u16(DeviceObjectId::DeviceTypeId, v); }
     inline Measurement firmware_version_u32(std::uint32_t v) { return detail::u32(DeviceObjectId::FirmwareVersionU32, v); }

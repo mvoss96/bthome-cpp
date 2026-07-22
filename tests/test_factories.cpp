@@ -143,6 +143,27 @@ int main()
         {"window(true)", BTHome::window(true), 0x2D, 1, {0x01}},
     };
 
+    // Event factories: button = 1 event byte; dimmer = event byte plus a step
+    // count for rotate events (None stays 1 byte, per spec example 3C00).
+    const Case event_cases[] = {
+        {"button_event(none)", BTHome::button_event(BTHome::ButtonEventType::None), 0x3A, 1, {0x00}},
+        {"button_event(press)", BTHome::button_event(BTHome::ButtonEventType::Press), 0x3A, 1, {0x01}},
+        {"button_event(double_press)", BTHome::button_event(BTHome::ButtonEventType::DoublePress), 0x3A, 1, {0x02}},
+        {"button_event(triple_press)", BTHome::button_event(BTHome::ButtonEventType::TriplePress), 0x3A, 1, {0x03}},
+        {"button_event(long_press)", BTHome::button_event(BTHome::ButtonEventType::LongPress), 0x3A, 1, {0x04}},
+        {"button_event(long_double_press)", BTHome::button_event(BTHome::ButtonEventType::LongDoublePress), 0x3A, 1, {0x05}},
+        {"button_event(long_triple_press)", BTHome::button_event(BTHome::ButtonEventType::LongTriplePress), 0x3A, 1, {0x06}},
+        {"button_event(hold_press)", BTHome::button_event(BTHome::ButtonEventType::HoldPress), 0x3A, 1, {0x80}},
+        {"command_event(off)", BTHome::command_event(BTHome::CommandEventType::Off), 0x3B, 2, {0x00, 0x00}},
+        {"command_event(on)", BTHome::command_event(BTHome::CommandEventType::On), 0x3B, 2, {0x00, 0x01}},
+        {"command_event(toggle)", BTHome::command_event(BTHome::CommandEventType::Toggle), 0x3B, 2, {0x00, 0x02}},
+        {"command_event(step_up, 5)", BTHome::command_event(BTHome::CommandEventType::StepUp, 5), 0x3B, 3, {0x01, 0x03, 0x05}},
+        {"command_event(step_down, 5)", BTHome::command_event(BTHome::CommandEventType::StepDown, 5), 0x3B, 3, {0x01, 0x04, 0x05}},
+        {"dimmer_event(none)", BTHome::dimmer_event(BTHome::DimmerEventType::None), 0x3C, 1, {0x00}},
+        {"dimmer_event(rotate_left, 3)", BTHome::dimmer_event(BTHome::DimmerEventType::RotateLeft, 3), 0x3C, 2, {0x01, 0x03}},
+        {"dimmer_event(rotate_right, 10)", BTHome::dimmer_event(BTHome::DimmerEventType::RotateRight, 10), 0x3C, 2, {0x02, 0x0A}},
+    };
+
     for (const Case &c : scalar_cases)
     {
         check_case(c);
@@ -151,14 +172,19 @@ int main()
     {
         check_case(c);
     }
+    for (const Case &c : event_cases)
+    {
+        check_case(c);
+    }
 
     // Completeness guard: update these counts when adding factories, so a new
     // factory without a test case fails loudly here.
     const std::size_t n_scalar = sizeof(scalar_cases) / sizeof(scalar_cases[0]);
     const std::size_t n_binary = sizeof(binary_cases) / sizeof(binary_cases[0]);
-    const bool counts_ok = (n_scalar == 62) && (n_binary == 28);
-    std::printf("[%s] factory case counts (%zu scalar, %zu binary)\n",
-                counts_ok ? "PASS" : "FAIL", n_scalar, n_binary);
+    const std::size_t n_event = sizeof(event_cases) / sizeof(event_cases[0]);
+    const bool counts_ok = (n_scalar == 62) && (n_binary == 28) && (n_event == 16);
+    std::printf("[%s] factory case counts (%zu scalar, %zu binary, %zu event)\n",
+                counts_ok ? "PASS" : "FAIL", n_scalar, n_binary, n_event);
     if (!counts_ok)
     {
         ++g_failures;

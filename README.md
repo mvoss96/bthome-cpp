@@ -89,6 +89,27 @@ std::size_t ad_size = packet.size();
 
 `[len][0x16][uuid lo][uuid hi][device-info][measurements...]`
 
+### Events
+
+Button, command and dimmer events use the same `add()` path. Receivers only
+process an event when the packet id changes, so include a fresh `packet_id()`
+and feel free to advertise the same event packet repeatedly for reliability:
+
+```cpp
+BTHome::Packet<31> packet;
+packet.setTriggerBased(true);  // only for devices that broadcast solely on events
+packet.add(BTHome::packet_id(next_id++));
+packet.add(BTHome::button_event(BTHome::ButtonEventType::Press));
+packet.add(BTHome::command_event(BTHome::CommandEventType::Toggle));
+packet.add(BTHome::dimmer_event(BTHome::DimmerEventType::RotateLeft, 3));
+```
+
+With several buttons, the k-th `button_event` entry addresses button k — pad
+earlier buttons with `ButtonEventType::None` (spec example `3A 00 3A 01` =
+press on button 2). The spec advises sending command events only in encrypted
+advertisements — anyone in radio range can observe or spoof plaintext
+commands.
+
 ## Build full advertising payload
 
 ```cpp

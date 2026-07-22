@@ -185,6 +185,43 @@ namespace BTHome
         DimmerEvent = 0x3C,
     };
 
+    // Button event codes (value byte of EventObjectId::ButtonEvent).
+    enum class ButtonEventType : std::uint8_t
+    {
+        // Placeholder for "no event": with several buttons, the k-th 0x3A
+        // entry in a packet addresses button k, so earlier buttons are padded
+        // with None (spec example: 3A 00 3A 01 = press on button 2).
+        None = 0x00,
+        Press = 0x01,
+        DoublePress = 0x02,
+        TriplePress = 0x03,
+        LongPress = 0x04,
+        LongDoublePress = 0x05,
+        LongTriplePress = 0x06,
+        HoldPress = 0x80,
+    };
+
+    // Dimmer event codes (first value byte of EventObjectId::DimmerEvent).
+    enum class DimmerEventType : std::uint8_t
+    {
+        None = 0x00,
+        RotateLeft = 0x01,
+        RotateRight = 0x02,
+    };
+
+    // Command event opcodes (EventObjectId::CommandEvent). Serialized as
+    // [argument count][opcode][arguments...]; StepUp/StepDown carry one
+    // step-count argument. The spec advises sending commands only in
+    // encrypted advertisements, since anyone can observe or spoof them.
+    enum class CommandEventType : std::uint8_t
+    {
+        Off = 0x00,
+        On = 0x01,
+        Toggle = 0x02,
+        StepUp = 0x03,
+        StepDown = 0x04,
+    };
+
     // Device object IDs.
     enum class DeviceObjectId : std::uint8_t
     {
