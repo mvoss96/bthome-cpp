@@ -637,6 +637,41 @@ static void test_text_and_raw()
     }
 }
 
+static void test_events()
+{
+    // Tests: The spec's multi-button example - None for button 1, press for
+    // button 2, encoded as sequential 0x3A entries in insertion order.
+    // Expects: Service data payload [3A 00 3A 01].
+    {
+        BTHome::Packet<31> p;
+        p.add(BTHome::button_event(BTHome::ButtonEventType::None));
+        p.add(BTHome::button_event(BTHome::ButtonEventType::Press));
+        const std::uint8_t want_sd[] = {0xD2, 0xFC, 0x40, 0x3A, 0x00, 0x3A, 0x01};
+        expect_bytes("multi-button spec example 3A003A01", p.serviceData(), p.serviceDataSize(), want_sd, sizeof(want_sd));
+    }
+
+    // Tests: Dimmer rotate event with step count alongside a button event.
+    // Expects: Button (0x3A) sorts before dimmer (0x3C); rotate left carries the step byte.
+    {
+        BTHome::Packet<31> p;
+        p.add(BTHome::dimmer_event(BTHome::DimmerEventType::RotateLeft, 3));
+        p.add(BTHome::button_event(BTHome::ButtonEventType::LongPress));
+        const std::uint8_t want_sd[] = {0xD2, 0xFC, 0x40, 0x3A, 0x04, 0x3C, 0x01, 0x03};
+        expect_bytes("button + dimmer rotate", p.serviceData(), p.serviceDataSize(), want_sd, sizeof(want_sd));
+    }
+
+    // Tests: An event mixed with measurements and packet_id.
+    // Expects: Canonical object-id order: packet_id (0x00) < temperature (0x02) < button (0x3A).
+    {
+        BTHome::Packet<31> p;
+        p.add(BTHome::button_event(BTHome::ButtonEventType::Press));
+        p.add(BTHome::temperature(20.0f));
+        p.add(BTHome::packet_id(5));
+        const std::uint8_t want_sd[] = {0xD2, 0xFC, 0x40, 0x00, 0x05, 0x02, 0xD0, 0x07, 0x3A, 0x01};
+        expect_bytes("event sorts after measurements", p.serviceData(), p.serviceDataSize(), want_sd, sizeof(want_sd));
+    }
+}
+
 int main()
 {
     test_header_and_basic_packet();
@@ -652,6 +687,7 @@ int main()
     test_flags_after_adds();
     test_accessor_idempotence();
     test_text_and_raw();
+    test_events();
 
     return test_summary();
 }
