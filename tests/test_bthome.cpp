@@ -650,14 +650,17 @@ static void test_events()
         expect_bytes("multi-button spec example 3A003A01", p.serviceData(), p.serviceDataSize(), want_sd, sizeof(want_sd));
     }
 
-    // Tests: Dimmer rotate event with step count alongside a button event.
-    // Expects: Button (0x3A) sorts before dimmer (0x3C); rotate left carries the step byte.
+    // Tests: All three event kinds in one packet, added in reverse id order.
+    // Expects: Canonical order button (0x3A) < command (0x3B) < dimmer (0x3C);
+    // rotate and step events carry their argument bytes.
     {
         BTHome::Packet<31> p;
         p.add(BTHome::dimmer_event(BTHome::DimmerEventType::RotateLeft, 3));
+        p.add(BTHome::command_event(BTHome::CommandEventType::StepUp, 5));
         p.add(BTHome::button_event(BTHome::ButtonEventType::LongPress));
-        const std::uint8_t want_sd[] = {0xD2, 0xFC, 0x40, 0x3A, 0x04, 0x3C, 0x01, 0x03};
-        expect_bytes("button + dimmer rotate", p.serviceData(), p.serviceDataSize(), want_sd, sizeof(want_sd));
+        const std::uint8_t want_sd[] = {0xD2, 0xFC, 0x40, 0x3A, 0x04,
+                                        0x3B, 0x01, 0x03, 0x05, 0x3C, 0x01, 0x03};
+        expect_bytes("button + command + dimmer", p.serviceData(), p.serviceDataSize(), want_sd, sizeof(want_sd));
     }
 
     // Tests: An event mixed with measurements and packet_id.

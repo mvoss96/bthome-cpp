@@ -114,6 +114,24 @@ namespace BTHome
         return detail::u8(EventObjectId::ButtonEvent, static_cast<std::uint8_t>(e));
     }
 
+    // Value layout: [argument count][opcode][arguments...] - spec examples
+    // 3B0002 (toggle) and 3B010305 (step up 5 steps).
+    inline Measurement command_event(CommandEventType e, std::uint8_t steps = 1)
+    {
+        Measurement m;
+        m.object_id = static_cast<std::uint8_t>(EventObjectId::CommandEvent);
+        const bool has_steps = (e == CommandEventType::StepUp) || (e == CommandEventType::StepDown);
+        m.data[0] = has_steps ? 1 : 0;
+        m.data[1] = static_cast<std::uint8_t>(e);
+        m.len = 2;
+        if (has_steps)
+        {
+            m.data[2] = steps;
+            m.len = 3;
+        }
+        return m;
+    }
+
     // None carries no step byte; rotate events carry the number of steps.
     inline Measurement dimmer_event(DimmerEventType e, std::uint8_t steps = 1)
     {

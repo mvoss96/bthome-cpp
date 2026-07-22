@@ -209,6 +209,19 @@ namespace BTHome
         RotateRight = 0x02,
     };
 
+    // Command event opcodes (EventObjectId::CommandEvent). Serialized as
+    // [argument count][opcode][arguments...]; StepUp/StepDown carry one
+    // step-count argument. The spec advises sending commands only in
+    // encrypted advertisements, since anyone can observe or spoof them.
+    enum class CommandEventType : std::uint8_t
+    {
+        Off = 0x00,
+        On = 0x01,
+        Toggle = 0x02,
+        StepUp = 0x03,
+        StepDown = 0x04,
+    };
+
     // Device object IDs.
     enum class DeviceObjectId : std::uint8_t
     {
