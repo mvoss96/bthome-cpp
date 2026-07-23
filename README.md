@@ -25,7 +25,13 @@ Dependency-free C++17 BTHome v2 payload builder.
 
 ### PlatformIO
 
-Add this repository as a library dependency (for example via `lib_deps`), then include `bthome.h`.
+The library is published in the [PlatformIO Registry](https://registry.platformio.org/libraries/mvoss96/bthome-cpp):
+
+```ini
+lib_deps = mvoss96/bthome-cpp@^0.3.0
+```
+
+Pinning a git tag works as well: `lib_deps = https://github.com/mvoss96/bthome-cpp.git#v0.3.0`. Then include `bthome.h`.
 
 ### ESP-IDF
 
