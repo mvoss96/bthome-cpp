@@ -11,9 +11,12 @@ namespace BTHome
 
         struct SensorEncoding
         {
-            float factor = 1.0f;
-            uint8_t width = 0;
-            bool is_signed = false;
+            // No default member initializers: a struct with them is not an
+            // aggregate until C++14, which would break the brace-returns in
+            // sensor_encoding() under C++11.
+            float factor;
+            uint8_t width;
+            bool is_signed;
         };
 
         /**
@@ -100,7 +103,7 @@ namespace BTHome
             case SensorObjectId::AccelerationS32:
                 return {0.000001f, 4, true};
             default:
-                return {};
+                return {1.0f, 0, false}; // width 0 = unknown id, value is never encoded
             }
         }
 

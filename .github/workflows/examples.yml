@@ -75,13 +75,9 @@ jobs:
           mkdir -p ~/Arduino/libraries
           cp -r "$GITHUB_WORKSPACE" ~/Arduino/libraries/bthome-cpp
       - name: Build example
-        # The stock AVR core builds gnu++11 by default; the library needs
-        # C++17, so pass the flag explicitly (cores like MiniCore default
-        # to gnu++17 and need nothing).
-        run: >
-          arduino-cli compile --fqbn arduino:avr:uno --warnings more
-          --build-property compiler.cpp.extra_flags=-std=gnu++17
-          examples/arduino_avr
+        # Deliberately no -std flag: the stock AVR core builds gnu++11, so
+        # this job also guards the library's C++11 compatibility.
+        run: arduino-cli compile --fqbn arduino:avr:uno --warnings more examples/arduino_avr
 
   platformio:
     # Covers the PlatformIO consumer path (the README's lib_deps install and
