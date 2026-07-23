@@ -11,34 +11,34 @@ struct Case
 {
     const char *name;
     BTHome::Measurement m;
-    std::uint8_t want_id;
-    std::uint8_t want_len;
-    std::uint8_t want_bytes[6];
+    uint8_t want_id;
+    uint8_t want_len;
+    uint8_t want_bytes[6];
 };
 
 static void check_case(const Case &c)
 {
     const bool id_ok = c.m.object_id == c.want_id;
     const bool len_ok = c.m.len == c.want_len;
-    const bool bytes_ok = std::memcmp(c.m.data, c.want_bytes, c.want_len) == 0;
+    const bool bytes_ok = memcmp(c.m.data, c.want_bytes, c.want_len) == 0;
     const bool ok = id_ok && len_ok && bytes_ok;
 
-    std::printf("[%s] %s", ok ? "PASS" : "FAIL", c.name);
+    printf("[%s] %s", ok ? "PASS" : "FAIL", c.name);
     if (!ok)
     {
-        std::printf("  got id=%02X len=%u bytes=", c.m.object_id, c.m.len);
-        for (std::uint8_t i = 0; i < c.m.len; ++i)
+        printf("  got id=%02X len=%u bytes=", c.m.object_id, c.m.len);
+        for (uint8_t i = 0; i < c.m.len; ++i)
         {
-            std::printf("%02X ", c.m.data[i]);
+            printf("%02X ", c.m.data[i]);
         }
-        std::printf(" want id=%02X len=%u bytes=", c.want_id, c.want_len);
-        for (std::uint8_t i = 0; i < c.want_len; ++i)
+        printf(" want id=%02X len=%u bytes=", c.want_id, c.want_len);
+        for (uint8_t i = 0; i < c.want_len; ++i)
         {
-            std::printf("%02X ", c.want_bytes[i]);
+            printf("%02X ", c.want_bytes[i]);
         }
         ++g_failures;
     }
-    std::printf("\n");
+    printf("\n");
 }
 
 int main()
@@ -179,11 +179,11 @@ int main()
 
     // Completeness guard: update these counts when adding factories, so a new
     // factory without a test case fails loudly here.
-    const std::size_t n_scalar = sizeof(scalar_cases) / sizeof(scalar_cases[0]);
-    const std::size_t n_binary = sizeof(binary_cases) / sizeof(binary_cases[0]);
-    const std::size_t n_event = sizeof(event_cases) / sizeof(event_cases[0]);
+    const size_t n_scalar = sizeof(scalar_cases) / sizeof(scalar_cases[0]);
+    const size_t n_binary = sizeof(binary_cases) / sizeof(binary_cases[0]);
+    const size_t n_event = sizeof(event_cases) / sizeof(event_cases[0]);
     const bool counts_ok = (n_scalar == 62) && (n_binary == 28) && (n_event == 16);
-    std::printf("[%s] factory case counts (%zu scalar, %zu binary, %zu event)\n",
+    printf("[%s] factory case counts (%zu scalar, %zu binary, %zu event)\n",
                 counts_ok ? "PASS" : "FAIL", n_scalar, n_binary, n_event);
     if (!counts_ok)
     {

@@ -34,6 +34,11 @@ Install **bthome-cpp** via the IDE's Library Manager (or put this repository
 in your Arduino libraries folder), add a BLE stack library such as
 NimBLE-Arduino, include `bthome.h`.
 
+AVR boards (avr-gcc) are supported too: the library uses only the C standard
+headers (`<stdint.h>`/`<stddef.h>`/`<string.h>`), which every toolchain ships —
+including avr-gcc, which has no libstdc++ wrapper headers. Pair it with
+whatever radio transports the bytes (BTHome itself is transport-agnostic).
+
 ### ESP-IDF
 
 Add the repo under your project's `components/` folder (it ships an
@@ -56,8 +61,8 @@ packet.add(BTHome::temperature(22.4f));
 packet.add(BTHome::humidity(54.3f));
 packet.add(BTHome::battery(92));
 
-const std::uint8_t* ad_element = packet.data();
-std::size_t ad_size = packet.size();
+const uint8_t* ad_element = packet.data();
+size_t ad_size = packet.size();
 ```
 
 `packet.data()` / `packet.size()` returns one AD element in this format:
@@ -88,7 +93,7 @@ commands.
 ## Build full advertising payload
 
 ```cpp
-std::uint8_t adv[31] = {};
+uint8_t adv[31] = {};
 int n = BTHome::build_advertising(packet, adv, sizeof(adv));
 if (n < 0)
 {
@@ -131,7 +136,7 @@ encryptor.setKey(key);  // 16 bytes, shared with Home Assistant
 encryptor.setMac(mac);  // the MAC your BLE stack advertises with
 encryptor.setCounter(restored_counter);  // restore after reboot!
 
-std::uint8_t adv[31] = {};
+uint8_t adv[31] = {};
 int n = BTHome::build_encrypted_advertising(packet, encryptor, adv, sizeof(adv));
 ```
 

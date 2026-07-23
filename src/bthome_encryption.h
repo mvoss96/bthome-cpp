@@ -1,10 +1,11 @@
 #pragma once
 
-#include <cstddef>
-#include <cstdint>
-// <string.h> instead of <cstring>: Zephyr's minimal C++ library ships no
-// C++ wrapper headers (only cstddef/cstdint/new), but the C header exists on
-// every supported libc. Calls are therefore unqualified (memcpy, not std::memcpy).
+#include <stddef.h>
+#include <stdint.h>
+// C headers (<stdint.h>/<stddef.h>/<string.h>) instead of the C++ wrappers:
+// avr-gcc ships no libstdc++ wrapper headers at all, and Zephyr's minimal C++
+// library lacks <cstring>. The C headers exist on every supported toolchain,
+// so types and calls stay unqualified (uint8_t, memcpy - no std::).
 #include <string.h>
 
 #include "bthome_defs.h"
@@ -30,16 +31,16 @@ namespace BTHome
  * @param mic        Output buffer for the 4-byte message integrity check.
  * @return true on success, false on any backend failure.
  */
-using CcmEncryptFn = bool (*)(const std::uint8_t *key,
-                              const std::uint8_t *nonce,
-                              const std::uint8_t *plaintext,
-                              std::size_t length,
-                              std::uint8_t *ciphertext,
-                              std::uint8_t *mic);
+using CcmEncryptFn = bool (*)(const uint8_t *key,
+                              const uint8_t *nonce,
+                              const uint8_t *plaintext,
+                              size_t length,
+                              uint8_t *ciphertext,
+                              uint8_t *mic);
 
 class Encryptor;
 
-template <std::size_t AdvCapacity>
+template <size_t AdvCapacity>
 class EncryptedPacket;
 
 /**
@@ -57,11 +58,11 @@ class EncryptedPacket;
  * @param complete_local_name true for AD type 0x09 (Complete Local Name), false for 0x08 (Shortened Local Name).
  * @return Payload size in bytes on success, or -1 on error (no counter is consumed on error).
  */
-template <std::size_t AdvCapacity>
+template <size_t AdvCapacity>
 int build_encrypted_advertising(const EncryptedPacket<AdvCapacity> &packet,
                                 Encryptor &encryptor,
-                                std::uint8_t *out,
-                                std::size_t out_capacity,
+                                uint8_t *out,
+                                size_t out_capacity,
                                 const char *local_name = nullptr,
                                 bool complete_local_name = true);
 
@@ -78,12 +79,12 @@ int build_encrypted_advertising(const EncryptedPacket<AdvCapacity> &packet,
 class Encryptor
 {
 public:
-    static constexpr std::size_t kKeyBytes = 16;     // AES-128 key length; entered in Home Assistant as 32 hex chars.
-    static constexpr std::size_t kMacBytes = 6;      // Bluetooth MAC address length (part of the nonce).
-    static constexpr std::size_t kNonceBytes = 13;   // CCM nonce: MAC(6) + UUID(2) + device-info(1) + counter(4).
-    static constexpr std::size_t kCounterBytes = 4;  // Replay-protection counter, sent little-endian after the ciphertext.
-    static constexpr std::size_t kMicBytes = 4;      // Message integrity check (auth tag), sent after the counter.
-    static constexpr std::size_t kOverheadBytes = kCounterBytes + kMicBytes; // Extra payload bytes an encrypted packet needs.
+    static constexpr size_t kKeyBytes = 16;     // AES-128 key length; entered in Home Assistant as 32 hex chars.
+    static constexpr size_t kMacBytes = 6;      // Bluetooth MAC address length (part of the nonce).
+    static constexpr size_t kNonceBytes = 13;   // CCM nonce: MAC(6) + UUID(2) + device-info(1) + counter(4).
+    static constexpr size_t kCounterBytes = 4;  // Replay-protection counter, sent little-endian after the ciphertext.
+    static constexpr size_t kMicBytes = 4;      // Message integrity check (auth tag), sent after the counter.
+    static constexpr size_t kOverheadBytes = kCounterBytes + kMicBytes; // Extra payload bytes an encrypted packet needs.
 
     /**
      * @brief Constructs an Encryptor with a CCM backend.
@@ -95,7 +96,7 @@ public:
      * @brief Sets the 16-byte AES key.
      * @param key Key bytes; copied into the Encryptor.
      */
-    void setKey(const std::uint8_t (&key)[kKeyBytes])
+    void setKey(const uint8_t (&key)[kKeyBytes])
     {
         memcpy(m_key, key, kKeyBytes);
     }
@@ -104,7 +105,7 @@ public:
      * @brief Sets the device MAC address used in the nonce.
      * @param mac MAC bytes in display order (e.g. 54:48:E6:8F:80:A5 -> {0x54, 0x48, ...}).
      */
-    void setMac(const std::uint8_t (&mac)[kMacBytes])
+    void setMac(const uint8_t (&mac)[kMacBytes])
     {
         memcpy(m_mac, mac, kMacBytes);
     }
@@ -113,7 +114,7 @@ public:
      * @brief Sets the counter used for the next encryption.
      * @param counter Next counter value; must exceed every previously broadcast value.
      */
-    void setCounter(std::uint32_t counter)
+    void setCounter(uint32_t counter)
     {
         m_counter = counter;
     }
@@ -122,7 +123,7 @@ public:
      * @brief Returns the counter that the next encryption will use.
      * @return Current counter value (persist this, plus a margin, across reboots).
      */
-    std::uint32_t counter() const
+    uint32_t counter() const
     {
         return m_counter;
     }
@@ -130,9 +131,9 @@ public:
 private:
     // Only build_encrypted_advertising drives the encryption; keeping this
     // private keeps the multi-parameter call out of the public API.
-    template <std::size_t AdvCapacity>
+    template <size_t AdvCapacity>
     friend int build_encrypted_advertising(const EncryptedPacket<AdvCapacity> &,
-                                           Encryptor &, std::uint8_t *, std::size_t,
+                                           Encryptor &, uint8_t *, size_t,
                                            const char *, bool);
 
     /**
@@ -149,12 +150,12 @@ private:
      * @param mic_out     Output buffer for the 4-byte MIC.
      * @return true on success, false if no backend is set or the backend fails.
      */
-    bool encrypt(std::uint8_t device_info,
-                 const std::uint8_t *plaintext,
-                 std::size_t length,
-                 std::uint8_t *ciphertext,
-                 std::uint8_t *counter_out,
-                 std::uint8_t *mic_out)
+    bool encrypt(uint8_t device_info,
+                 const uint8_t *plaintext,
+                 size_t length,
+                 uint8_t *ciphertext,
+                 uint8_t *counter_out,
+                 uint8_t *mic_out)
     {
         if (m_fn == nullptr)
         {
@@ -162,16 +163,16 @@ private:
         }
 
         // Nonce: MAC(6) + UUID little-endian(2) + device-info(1) + counter little-endian(4).
-        std::uint8_t nonce[kNonceBytes];
+        uint8_t nonce[kNonceBytes];
         memcpy(nonce, m_mac, kMacBytes);
-        std::size_t p = kMacBytes;
-        nonce[p++] = static_cast<std::uint8_t>(kServiceUuid & 0xFFu);
-        nonce[p++] = static_cast<std::uint8_t>(kServiceUuid >> 8);
+        size_t p = kMacBytes;
+        nonce[p++] = static_cast<uint8_t>(kServiceUuid & 0xFFu);
+        nonce[p++] = static_cast<uint8_t>(kServiceUuid >> 8);
         nonce[p++] = device_info;
-        nonce[p++] = static_cast<std::uint8_t>(m_counter & 0xFFu);
-        nonce[p++] = static_cast<std::uint8_t>((m_counter >> 8) & 0xFFu);
-        nonce[p++] = static_cast<std::uint8_t>((m_counter >> 16) & 0xFFu);
-        nonce[p++] = static_cast<std::uint8_t>((m_counter >> 24) & 0xFFu);
+        nonce[p++] = static_cast<uint8_t>(m_counter & 0xFFu);
+        nonce[p++] = static_cast<uint8_t>((m_counter >> 8) & 0xFFu);
+        nonce[p++] = static_cast<uint8_t>((m_counter >> 16) & 0xFFu);
+        nonce[p++] = static_cast<uint8_t>((m_counter >> 24) & 0xFFu);
 
         if (!m_fn(m_key, nonce, plaintext, length, ciphertext, mic_out))
         {
@@ -187,9 +188,9 @@ private:
     }
 
     CcmEncryptFn m_fn = nullptr;
-    std::uint8_t m_key[kKeyBytes] = {};
-    std::uint8_t m_mac[kMacBytes] = {};
-    std::uint32_t m_counter = 0;
+    uint8_t m_key[kKeyBytes] = {};
+    uint8_t m_mac[kMacBytes] = {};
+    uint32_t m_counter = 0;
 };
 
 /**
@@ -202,11 +203,11 @@ private:
  * accepts this type, so plaintext serialization of an encrypted packet is a
  * compile error.
  */
-template <std::size_t AdvCapacity>
+template <size_t AdvCapacity>
 class EncryptedPacket
 {
 public:
-    static constexpr std::size_t kOverheadBytes = Encryptor::kOverheadBytes;
+    static constexpr size_t kOverheadBytes = Encryptor::kOverheadBytes;
     static_assert(AdvCapacity > ServiceDataHeader::kByteCount + kOverheadBytes,
                   "AdvCapacity must hold the BTHome header plus counter and MIC");
 
@@ -253,7 +254,7 @@ public:
      * @brief Returns the serialized size INCLUDING encryption overhead.
      * @return Size in bytes of the final encrypted AD element.
      */
-    std::size_t size() const
+    size_t size() const
     {
         return m_packet.size() + kOverheadBytes;
     }
@@ -271,29 +272,29 @@ private:
     Inner m_packet;
 };
 
-template <std::size_t AdvCapacity>
+template <size_t AdvCapacity>
 int build_encrypted_advertising(const EncryptedPacket<AdvCapacity> &packet,
                                 Encryptor &encryptor,
-                                std::uint8_t *out,
-                                std::size_t out_capacity,
+                                uint8_t *out,
+                                size_t out_capacity,
                                 const char *local_name,
                                 bool complete_local_name)
 {
-    constexpr std::size_t kFlagsBytes = 3; // 02 01 06
-    constexpr std::size_t kHeaderBytes = ServiceDataHeader::kByteCount;
+    constexpr size_t kFlagsBytes = 3; // 02 01 06
+    constexpr size_t kHeaderBytes = ServiceDataHeader::kByteCount;
     if (out == nullptr)
     {
         return -1;
     }
 
-    const std::size_t local_name_len = (local_name != nullptr) ? strlen(local_name) : 0;
+    const size_t local_name_len = (local_name != nullptr) ? strlen(local_name) : 0;
     if (local_name_len > 0xFE)
     {
         return -1;
     }
 
-    const std::size_t ad_size = packet.size(); // Inner size + counter + MIC.
-    const std::size_t total = kFlagsBytes + ad_size + ((local_name_len > 0) ? (2 + local_name_len) : 0);
+    const size_t ad_size = packet.size(); // Inner size + counter + MIC.
+    const size_t total = kFlagsBytes + ad_size + ((local_name_len > 0) ? (2 + local_name_len) : 0);
     if (total > out_capacity)
     {
         return -1;
@@ -307,24 +308,24 @@ int build_encrypted_advertising(const EncryptedPacket<AdvCapacity> &packet,
     // by the encryption overhead.
     const auto &inner = packet.inner();
     memcpy(out + kFlagsBytes, inner.data(), kHeaderBytes);
-    out[kFlagsBytes] = static_cast<std::uint8_t>(ad_size - 1);
+    out[kFlagsBytes] = static_cast<uint8_t>(ad_size - 1);
 
-    const std::uint8_t device_info = inner.data()[kHeaderBytes - 1];
-    const std::uint8_t *plaintext = inner.data() + kHeaderBytes;
-    const std::size_t plain_len = inner.size() - kHeaderBytes;
+    const uint8_t device_info = inner.data()[kHeaderBytes - 1];
+    const uint8_t *plaintext = inner.data() + kHeaderBytes;
+    const size_t plain_len = inner.size() - kHeaderBytes;
 
-    std::uint8_t *ciphertext = out + kFlagsBytes + kHeaderBytes;
-    std::uint8_t *counter_out = ciphertext + plain_len;
-    std::uint8_t *mic_out = counter_out + Encryptor::kCounterBytes;
+    uint8_t *ciphertext = out + kFlagsBytes + kHeaderBytes;
+    uint8_t *counter_out = ciphertext + plain_len;
+    uint8_t *mic_out = counter_out + Encryptor::kCounterBytes;
     if (!encryptor.encrypt(device_info, plaintext, plain_len, ciphertext, counter_out, mic_out))
     {
         return -1;
     }
 
-    std::size_t p = kFlagsBytes + ad_size;
+    size_t p = kFlagsBytes + ad_size;
     if (local_name_len > 0)
     {
-        out[p++] = static_cast<std::uint8_t>(1 + local_name_len); // length of Local Name AD
+        out[p++] = static_cast<uint8_t>(1 + local_name_len); // length of Local Name AD
         out[p++] = complete_local_name ? 0x09 : 0x08;             // AD type: Complete or Shortened Local Name
         memcpy(out + p, local_name, local_name_len);         // Copy local name
         p += local_name_len;

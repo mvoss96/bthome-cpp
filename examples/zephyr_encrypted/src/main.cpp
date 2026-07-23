@@ -14,14 +14,14 @@
 #include <zephyr/kernel.h>
 
 // 16-byte key, shared with Home Assistant (enter it there as 32 hex chars).
-static const std::uint8_t kKey[BTHome::Encryptor::kKeyBytes] = {
+static const uint8_t kKey[BTHome::Encryptor::kKeyBytes] = {
     0x23, 0x1D, 0x39, 0xC1, 0xD7, 0xCC, 0x1A, 0xB1,
     0xAE, 0xE2, 0x24, 0xCD, 0x09, 0x6D, 0xB9, 0x32};
 
 static BTHome::Encryptor encryptor(&BTHome::psa_ccm_backend);
 
 // Built once at startup; the bytes stay valid because the buffer is static.
-static std::uint8_t adv[31];
+static uint8_t adv[31];
 
 int main(void) {
     if (bt_enable(nullptr)) {
@@ -33,7 +33,7 @@ int main(void) {
     bt_addr_le_t addr;
     size_t count = 1;
     bt_id_get(&addr, &count);
-    std::uint8_t mac[BTHome::Encryptor::kMacBytes];
+    uint8_t mac[BTHome::Encryptor::kMacBytes];
     for (size_t i = 0; i < BTHome::Encryptor::kMacBytes; i++) {
         mac[i] = addr.a.val[BTHome::Encryptor::kMacBytes - 1 - i];
     }
@@ -60,7 +60,7 @@ int main(void) {
     // offset 5 and runs to the end (no name AD was requested).
     const struct bt_data ad[] = {
         BT_DATA_BYTES(BT_DATA_FLAGS, BT_LE_AD_NO_BREDR),
-        BT_DATA(BT_DATA_SVC_DATA16, adv + 5, static_cast<std::uint8_t>(n - 5)),
+        BT_DATA(BT_DATA_SVC_DATA16, adv + 5, static_cast<uint8_t>(n - 5)),
     };
 
     bt_le_adv_start(BT_LE_ADV_NCONN, ad, ARRAY_SIZE(ad), nullptr, 0);

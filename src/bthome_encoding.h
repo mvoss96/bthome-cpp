@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cstdint>
+#include <stdint.h>
 
 #include "bthome_defs.h"
 
@@ -12,7 +12,7 @@ namespace BTHome
         struct SensorEncoding
         {
             float factor = 1.0f;
-            std::uint8_t width = 0;
+            uint8_t width = 0;
             bool is_signed = false;
         };
 
@@ -111,24 +111,24 @@ namespace BTHome
          * @param width Number of payload bytes.
          * @return Encoded Measurement with little-endian value bytes.
          */
-        inline Measurement make_u(std::uint8_t id, std::uint64_t raw,
-                                  std::uint8_t width)
+        inline Measurement make_u(uint8_t id, uint64_t raw,
+                                  uint8_t width)
         {
             Measurement m;
             m.object_id = id;
             m.len = width;
 
-            const std::uint64_t umax =
-                (width >= 8) ? ~std::uint64_t{0}
-                             : ((std::uint64_t{1} << (8 * width)) - 1);
+            const uint64_t umax =
+                (width >= 8) ? ~uint64_t{0}
+                             : ((uint64_t{1} << (8 * width)) - 1);
             if (raw > umax)
             {
                 raw = umax;
             }
 
-            for (std::uint8_t i = 0; i < width; ++i)
+            for (uint8_t i = 0; i < width; ++i)
             {
-                m.data[i] = static_cast<std::uint8_t>(raw & 0xFF);
+                m.data[i] = static_cast<uint8_t>(raw & 0xFF);
                 raw >>= 8;
             }
             return m;
@@ -141,15 +141,15 @@ namespace BTHome
          * @param width Number of payload bytes.
          * @return Encoded Measurement with little-endian value bytes.
          */
-        inline Measurement make_s(std::uint8_t id, std::int64_t raw,
-                                  std::uint8_t width)
+        inline Measurement make_s(uint8_t id, int64_t raw,
+                                  uint8_t width)
         {
             Measurement m;
             m.object_id = id;
             m.len = width;
 
-            const std::int64_t max_v = (std::int64_t{1} << (8 * width - 1)) - 1;
-            const std::int64_t min_v = -(std::int64_t{1} << (8 * width - 1));
+            const int64_t max_v = (int64_t{1} << (8 * width - 1)) - 1;
+            const int64_t min_v = -(int64_t{1} << (8 * width - 1));
             if (raw > max_v)
             {
                 raw = max_v;
@@ -159,10 +159,10 @@ namespace BTHome
                 raw = min_v;
             }
 
-            std::uint64_t u = static_cast<std::uint64_t>(raw);
-            for (std::uint8_t i = 0; i < width; ++i)
+            uint64_t u = static_cast<uint64_t>(raw);
+            for (uint8_t i = 0; i < width; ++i)
             {
-                m.data[i] = static_cast<std::uint8_t>(u & 0xFF);
+                m.data[i] = static_cast<uint8_t>(u & 0xFF);
                 u >>= 8;
             }
             return m;
@@ -178,18 +178,18 @@ namespace BTHome
         {
             const SensorEncoding e = sensor_encoding(id);
             Measurement m;
-            m.object_id = static_cast<std::uint8_t>(id);
+            m.object_id = static_cast<uint8_t>(id);
             m.len = e.width;
 
             // Scale to raw integer units and round half away from zero.
             const float s = value / e.factor;
-            std::int64_t raw = static_cast<std::int64_t>(s >= 0.0f ? s + 0.5f : s - 0.5f);
+            int64_t raw = static_cast<int64_t>(s >= 0.0f ? s + 0.5f : s - 0.5f);
 
             // Clamp to the representable range for the selected width/sign.
             if (e.is_signed)
             {
-                const std::int64_t max_v = (std::int64_t{1} << (8 * e.width - 1)) - 1;
-                const std::int64_t min_v = -(std::int64_t{1} << (8 * e.width - 1));
+                const int64_t max_v = (int64_t{1} << (8 * e.width - 1)) - 1;
+                const int64_t min_v = -(int64_t{1} << (8 * e.width - 1));
                 if (raw > max_v)
                 {
                     raw = max_v;
@@ -205,20 +205,20 @@ namespace BTHome
                 {
                     raw = 0;
                 }
-                const std::uint64_t umax =
-                    (e.width >= 8) ? ~std::uint64_t{0}
-                                   : ((std::uint64_t{1} << (8 * e.width)) - 1);
-                if (static_cast<std::uint64_t>(raw) > umax)
+                const uint64_t umax =
+                    (e.width >= 8) ? ~uint64_t{0}
+                                   : ((uint64_t{1} << (8 * e.width)) - 1);
+                if (static_cast<uint64_t>(raw) > umax)
                 {
-                    raw = static_cast<std::int64_t>(umax);
+                    raw = static_cast<int64_t>(umax);
                 }
             }
 
             // Write payload in little-endian byte order.
-            std::uint64_t u = static_cast<std::uint64_t>(raw);
-            for (std::uint8_t i = 0; i < e.width; ++i)
+            uint64_t u = static_cast<uint64_t>(raw);
+            for (uint8_t i = 0; i < e.width; ++i)
             {
-                m.data[i] = static_cast<std::uint8_t>(u & 0xFF);
+                m.data[i] = static_cast<uint8_t>(u & 0xFF);
                 u >>= 8;
             }
 
@@ -233,9 +233,9 @@ namespace BTHome
          * @return Encoded Measurement.
          */
         template <typename ObjectId>
-        inline Measurement u8(ObjectId id, std::uint64_t raw)
+        inline Measurement u8(ObjectId id, uint64_t raw)
         {
-            return make_u(static_cast<std::uint8_t>(id), raw, 1);
+            return make_u(static_cast<uint8_t>(id), raw, 1);
         }
 
         /**
@@ -246,9 +246,9 @@ namespace BTHome
          * @return Encoded Measurement.
          */
         template <typename ObjectId>
-        inline Measurement u16(ObjectId id, std::uint64_t raw)
+        inline Measurement u16(ObjectId id, uint64_t raw)
         {
-            return make_u(static_cast<std::uint8_t>(id), raw, 2);
+            return make_u(static_cast<uint8_t>(id), raw, 2);
         }
 
         /**
@@ -259,9 +259,9 @@ namespace BTHome
          * @return Encoded Measurement.
          */
         template <typename ObjectId>
-        inline Measurement u32(ObjectId id, std::uint64_t raw)
+        inline Measurement u32(ObjectId id, uint64_t raw)
         {
-            return make_u(static_cast<std::uint8_t>(id), raw, 4);
+            return make_u(static_cast<uint8_t>(id), raw, 4);
         }
 
         /**
@@ -272,9 +272,9 @@ namespace BTHome
          * @return Encoded Measurement.
          */
         template <typename ObjectId>
-        inline Measurement i8(ObjectId id, std::int64_t raw)
+        inline Measurement i8(ObjectId id, int64_t raw)
         {
-            return make_s(static_cast<std::uint8_t>(id), raw, 1);
+            return make_s(static_cast<uint8_t>(id), raw, 1);
         }
 
         /**
@@ -285,9 +285,9 @@ namespace BTHome
          * @return Encoded Measurement.
          */
         template <typename ObjectId>
-        inline Measurement i16(ObjectId id, std::int64_t raw)
+        inline Measurement i16(ObjectId id, int64_t raw)
         {
-            return make_s(static_cast<std::uint8_t>(id), raw, 2);
+            return make_s(static_cast<uint8_t>(id), raw, 2);
         }
 
         /**
@@ -298,9 +298,9 @@ namespace BTHome
          * @return Encoded Measurement.
          */
         template <typename ObjectId>
-        inline Measurement i32(ObjectId id, std::int64_t raw)
+        inline Measurement i32(ObjectId id, int64_t raw)
         {
-            return make_s(static_cast<std::uint8_t>(id), raw, 4);
+            return make_s(static_cast<uint8_t>(id), raw, 4);
         }
 
         /**
@@ -314,7 +314,7 @@ namespace BTHome
         inline Measurement b(ObjectId id, bool on)
         {
             Measurement m;
-            m.object_id = static_cast<std::uint8_t>(id);
+            m.object_id = static_cast<uint8_t>(id);
             m.len = 1;
             m.data[0] = on ? 1 : 0;
             return m;

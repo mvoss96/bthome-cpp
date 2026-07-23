@@ -10,7 +10,7 @@ static void test_header_and_basic_packet()
     // Expects: Exact header AD block [04 16 D2 FC 40] and serviceDataSize = size-2.
     {
         BTHome::Packet<31> p;
-        const std::uint8_t want[] = {0x04, 0x16, 0xD2, 0xFC, 0x40};
+        const uint8_t want[] = {0x04, 0x16, 0xD2, 0xFC, 0x40};
         expect_bytes("header-only packet", p.data(), p.size(), want, sizeof(want));
         expect_true("serviceDataSize == size - 2", p.serviceDataSize() == (p.size() - 2));
     }
@@ -23,7 +23,7 @@ static void test_header_and_basic_packet()
         const bool b = p.add(BTHome::temperature(21.53f));
         const bool c = p.add(BTHome::battery(87));
 
-        const std::uint8_t want_ad[] = {
+        const uint8_t want_ad[] = {
             0x0C,
             0x16,
             0xD2,
@@ -40,7 +40,7 @@ static void test_header_and_basic_packet()
         };
         expect_bytes("mixed measurements sorted by object-id", p.data(), p.size(), want_ad, sizeof(want_ad));
 
-        const std::uint8_t want_sd[] = {
+        const uint8_t want_sd[] = {
             0xD2,
             0xFC,
             0x40,
@@ -77,7 +77,7 @@ static void test_ordering_and_ids()
         p.add(BTHome::temperature(18.2f));
         p.add(BTHome::temperature(21.5f));
 
-        const std::uint8_t want_sd[] = {
+        const uint8_t want_sd[] = {
             0xD2,
             0xFC,
             0x40,
@@ -98,7 +98,7 @@ static void test_ordering_and_ids()
         p.add(BTHome::temperature(20.0f));
         p.add(BTHome::packet_id(7));
 
-        const std::uint8_t want_sd[] = {
+        const uint8_t want_sd[] = {
             0xD2,
             0xFC,
             0x40,
@@ -117,7 +117,7 @@ static void test_ordering_and_ids()
         BTHome::Packet<31> p;
         p.add(BTHome::motion(true));
         p.add(BTHome::window(false));
-        const std::uint8_t want_sd[] = {0xD2, 0xFC, 0x40, 0x21, 0x01, 0x2D, 0x00};
+        const uint8_t want_sd[] = {0xD2, 0xFC, 0x40, 0x21, 0x01, 0x2D, 0x00};
         expect_bytes("binary ids motion/window", p.serviceData(), p.serviceDataSize(), want_sd, sizeof(want_sd));
     }
 
@@ -127,7 +127,7 @@ static void test_ordering_and_ids()
         BTHome::Packet<31> p;
         p.add(BTHome::heat(true));
         p.add(BTHome::lock(false));
-        const std::uint8_t want_sd[] = {0xD2, 0xFC, 0x40, 0x1D, 0x01, 0x1F, 0x00};
+        const uint8_t want_sd[] = {0xD2, 0xFC, 0x40, 0x1D, 0x01, 0x1F, 0x00};
         expect_bytes("binary ids heat/lock", p.serviceData(), p.serviceDataSize(), want_sd, sizeof(want_sd));
     }
 
@@ -137,7 +137,7 @@ static void test_ordering_and_ids()
         BTHome::Packet<31> p;
         p.add(BTHome::window(false));
         p.add(BTHome::humidity_u8(35));
-        const std::uint8_t want_sd[] = {0xD2, 0xFC, 0x40, 0x2D, 0x00, 0x2E, 0x23};
+        const uint8_t want_sd[] = {0xD2, 0xFC, 0x40, 0x2D, 0x00, 0x2E, 0x23};
         expect_bytes("window (0x2D) vs humidity_u8 (0x2E)", p.serviceData(), p.serviceDataSize(), want_sd, sizeof(want_sd));
     }
 }
@@ -149,7 +149,7 @@ static void test_numeric_encoding_paths()
     {
         BTHome::Packet<31> p;
         p.add(BTHome::temperature(-12.34f));
-        const std::uint8_t want_sd[] = {0xD2, 0xFC, 0x40, 0x02, 0x2E, 0xFB};
+        const uint8_t want_sd[] = {0xD2, 0xFC, 0x40, 0x02, 0x2E, 0xFB};
         expect_bytes("negative temperature encoding", p.serviceData(), p.serviceDataSize(), want_sd, sizeof(want_sd));
     }
 
@@ -158,7 +158,7 @@ static void test_numeric_encoding_paths()
     {
         BTHome::Packet<31> p;
         p.add(BTHome::pressure(1013.25f));
-        const std::uint8_t want_sd[] = {0xD2, 0xFC, 0x40, 0x04, 0xCD, 0x8B, 0x01};
+        const uint8_t want_sd[] = {0xD2, 0xFC, 0x40, 0x04, 0xCD, 0x8B, 0x01};
         expect_bytes("pressure uint24 encoding", p.serviceData(), p.serviceDataSize(), want_sd, sizeof(want_sd));
     }
 
@@ -167,7 +167,7 @@ static void test_numeric_encoding_paths()
     {
         BTHome::Packet<31> p;
         p.add(BTHome::energy_u32(12.345f));
-        const std::uint8_t want_sd[] = {0xD2, 0xFC, 0x40, 0x4D, 0x39, 0x30, 0x00, 0x00};
+        const uint8_t want_sd[] = {0xD2, 0xFC, 0x40, 0x4D, 0x39, 0x30, 0x00, 0x00};
         expect_bytes("energy_u32 scaled", p.serviceData(), p.serviceDataSize(), want_sd, sizeof(want_sd));
     }
 
@@ -176,7 +176,7 @@ static void test_numeric_encoding_paths()
     {
         BTHome::Packet<31> p;
         p.add(BTHome::count_s16(-22));
-        const std::uint8_t want_sd[] = {0xD2, 0xFC, 0x40, 0x5A, 0xEA, 0xFF};
+        const uint8_t want_sd[] = {0xD2, 0xFC, 0x40, 0x5A, 0xEA, 0xFF};
         expect_bytes("count_s16 signed wrapper", p.serviceData(), p.serviceDataSize(), want_sd, sizeof(want_sd));
     }
 
@@ -185,7 +185,7 @@ static void test_numeric_encoding_paths()
     {
         BTHome::Packet<31> p;
         p.add(BTHome::timestamp(1684093277u));
-        const std::uint8_t want_sd[] = {0xD2, 0xFC, 0x40, 0x50, 0x5D, 0x39, 0x61, 0x64};
+        const uint8_t want_sd[] = {0xD2, 0xFC, 0x40, 0x50, 0x5D, 0x39, 0x61, 0x64};
         expect_bytes("timestamp uint32", p.serviceData(), p.serviceDataSize(), want_sd, sizeof(want_sd));
     }
 }
@@ -197,7 +197,7 @@ static void test_device_object_paths()
     {
         BTHome::Packet<31> p;
         p.add(BTHome::device_type_id(1));
-        const std::uint8_t want_sd[] = {0xD2, 0xFC, 0x40, 0xF0, 0x01, 0x00};
+        const uint8_t want_sd[] = {0xD2, 0xFC, 0x40, 0xF0, 0x01, 0x00};
         expect_bytes("device type id u16", p.serviceData(), p.serviceDataSize(), want_sd, sizeof(want_sd));
     }
 
@@ -206,7 +206,7 @@ static void test_device_object_paths()
     {
         BTHome::Packet<31> p;
         p.add(BTHome::firmware_version_u32(0x04020100u));
-        const std::uint8_t want_sd[] = {0xD2, 0xFC, 0x40, 0xF1, 0x00, 0x01, 0x02, 0x04};
+        const uint8_t want_sd[] = {0xD2, 0xFC, 0x40, 0xF1, 0x00, 0x01, 0x02, 0x04};
         expect_bytes("firmware version u32", p.serviceData(), p.serviceDataSize(), want_sd, sizeof(want_sd));
     }
 
@@ -215,7 +215,7 @@ static void test_device_object_paths()
     {
         BTHome::Packet<31> p;
         p.add(BTHome::firmware_version_u24(0x060100u));
-        const std::uint8_t want_sd[] = {0xD2, 0xFC, 0x40, 0xF2, 0x00, 0x01, 0x06};
+        const uint8_t want_sd[] = {0xD2, 0xFC, 0x40, 0xF2, 0x00, 0x01, 0x06};
         expect_bytes("firmware version u24", p.serviceData(), p.serviceDataSize(), want_sd, sizeof(want_sd));
     }
 }
@@ -229,7 +229,7 @@ static void test_rounding_and_clamping()
         p.add(BTHome::temperature(1.235f)); // 123.5 -> 124 -> 0x007C
         p.add(BTHome::dewpoint(-1.235f));   // -123.5 -> -124 -> 0xFF84
 
-        const std::uint8_t want_sd[] = {
+        const uint8_t want_sd[] = {
             0xD2,
             0xFC,
             0x40,
@@ -250,7 +250,7 @@ static void test_rounding_and_clamping()
         p.add(BTHome::temperature(500.0f));
         p.add(BTHome::dewpoint(-500.0f));
 
-        const std::uint8_t want_sd[] = {
+        const uint8_t want_sd[] = {
             0xD2,
             0xFC,
             0x40,
@@ -271,7 +271,7 @@ static void test_rounding_and_clamping()
         p.add(BTHome::humidity(-3.0f));     // unsigned 2-byte scaled -> clamp to 0
         p.add(BTHome::pressure(200000.0f)); // unsigned 3-byte scaled -> clamp to 0xFFFFFF
 
-        const std::uint8_t want_sd[] = {
+        const uint8_t want_sd[] = {
             0xD2,
             0xFC,
             0x40,
@@ -299,7 +299,7 @@ static void test_capacity_and_overflow_behavior()
         expect_true("tiny packet first add ok", first_ok);
         expect_true("tiny packet second add rejected", !second_ok);
 
-        const std::uint8_t want_ad[] = {0x06, 0x16, 0xD2, 0xFC, 0x40, 0x01, 0x32};
+        const uint8_t want_ad[] = {0x06, 0x16, 0xD2, 0xFC, 0x40, 0x01, 0x32};
         expect_bytes("tiny packet remains valid after rejection", p.data(), p.size(), want_ad, sizeof(want_ad));
     }
 }
@@ -312,11 +312,11 @@ static void test_advertising_builder()
         BTHome::Packet<31> p;
         p.add(BTHome::battery(87));
 
-        std::uint8_t adv[31] = {};
+        uint8_t adv[31] = {};
         const int adv_size = BTHome::build_advertising(p, adv, sizeof(adv));
         expect_true("adv basic build success", adv_size >= 0);
 
-        const std::uint8_t want[] = {
+        const uint8_t want[] = {
             0x02,
             0x01,
             0x06,
@@ -328,7 +328,7 @@ static void test_advertising_builder()
             0x01,
             0x57,
         };
-        expect_bytes("adv basic payload", adv, static_cast<std::size_t>(adv_size), want, sizeof(want));
+        expect_bytes("adv basic payload", adv, static_cast<size_t>(adv_size), want, sizeof(want));
     }
 
     // Tests: Advertising with complete local name (AD type 0x09).
@@ -337,11 +337,11 @@ static void test_advertising_builder()
         BTHome::Packet<31> p;
         p.add(BTHome::battery(87));
 
-        std::uint8_t adv[31] = {};
+        uint8_t adv[31] = {};
         const int adv_size = BTHome::build_advertising(p, adv, sizeof(adv), "node", true);
         expect_true("adv with complete local name", adv_size >= 0);
 
-        const std::uint8_t want[] = {
+        const uint8_t want[] = {
             0x02,
             0x01,
             0x06,
@@ -359,7 +359,7 @@ static void test_advertising_builder()
             'd',
             'e',
         };
-        expect_bytes("adv local name complete", adv, static_cast<std::size_t>(adv_size), want, sizeof(want));
+        expect_bytes("adv local name complete", adv, static_cast<size_t>(adv_size), want, sizeof(want));
     }
 
     // Tests: Advertising with shortened local name (AD type 0x08).
@@ -368,11 +368,11 @@ static void test_advertising_builder()
         BTHome::Packet<31> p;
         p.add(BTHome::battery(87));
 
-        std::uint8_t adv[31] = {};
+        uint8_t adv[31] = {};
         const int adv_size = BTHome::build_advertising(p, adv, sizeof(adv), "nd", false);
         expect_true("adv with shortened local name", adv_size >= 0);
 
-        const std::uint8_t want[] = {
+        const uint8_t want[] = {
             0x02,
             0x01,
             0x06,
@@ -388,7 +388,7 @@ static void test_advertising_builder()
             'n',
             'd',
         };
-        expect_bytes("adv local name shortened", adv, static_cast<std::size_t>(adv_size), want, sizeof(want));
+        expect_bytes("adv local name shortened", adv, static_cast<size_t>(adv_size), want, sizeof(want));
     }
 
     // Tests: Error paths of the advertising builder.
@@ -397,7 +397,7 @@ static void test_advertising_builder()
         BTHome::Packet<31> p;
         p.add(BTHome::battery(87));
 
-        std::uint8_t adv_small[9] = {};
+        uint8_t adv_small[9] = {};
         expect_true("adv fails on too-small output buffer",
                     BTHome::build_advertising(p, adv_small, sizeof(adv_small)) == -1);
 
@@ -405,12 +405,12 @@ static void test_advertising_builder()
                     BTHome::build_advertising(p, nullptr, 31) == -1);
 
         char long_name[256] = {};
-        for (std::size_t i = 0; i < 255; ++i)
+        for (size_t i = 0; i < 255; ++i)
         {
             long_name[i] = 'A';
         }
         long_name[255] = '\0';
-        std::uint8_t adv[300] = {};
+        uint8_t adv[300] = {};
         expect_true("adv rejects local name > 254 bytes",
                     BTHome::build_advertising(p, adv, sizeof(adv), long_name, true) == -1);
     }
@@ -429,7 +429,7 @@ static void test_insert_positions()
         p.add(BTHome::packet_id(1));           // 0x00 - new front
         p.add(BTHome::conductivity(3120.0f));  // 0x56 - new tail
 
-        const std::uint8_t want_sd[] = {
+        const uint8_t want_sd[] = {
             0xD2, 0xFC, 0x40,
             0x00, 0x01,                   // packet_id
             0x01, 0x57,                   // battery
@@ -448,7 +448,7 @@ static void test_insert_positions()
         p.add(BTHome::temperature(2.0f)); // raw 200
         p.add(BTHome::temperature(3.0f)); // raw 300
 
-        const std::uint8_t want_sd[] = {
+        const uint8_t want_sd[] = {
             0xD2, 0xFC, 0x40,
             0x02, 0x64, 0x00,
             0x02, 0xC8, 0x00,
@@ -472,7 +472,7 @@ static void test_exact_capacity_boundaries()
         const bool overflow = p.add(BTHome::battery(50)); // 2 bytes -> would be 12
         expect_true("one-past-full add rejected", !overflow);
 
-        const std::uint8_t want_ad[] = {
+        const uint8_t want_ad[] = {
             0x09, 0x16, 0xD2, 0xFC, 0x40,
             0x02, 0xD0, 0x07,
             0x21, 0x01,
@@ -486,7 +486,7 @@ static void test_exact_capacity_boundaries()
     {
         BTHome::Packet<31> p;
         int added = 0;
-        while (p.add(BTHome::battery(static_cast<std::uint8_t>(added))) && added < 100)
+        while (p.add(BTHome::battery(static_cast<uint8_t>(added))) && added < 100)
         {
             ++added;
         }
@@ -506,7 +506,7 @@ static void test_flags_after_adds()
     p.add(BTHome::motion(true));
 
     p.setTriggerBased(true);
-    const std::uint8_t want_trigger[] = {
+    const uint8_t want_trigger[] = {
         0xD2, 0xFC, 0x44,
         0x02, 0xD0, 0x07,
         0x21, 0x01,
@@ -514,7 +514,7 @@ static void test_flags_after_adds()
     expect_bytes("trigger flag set after adds", p.serviceData(), p.serviceDataSize(), want_trigger, sizeof(want_trigger));
 
     p.setEncrypted(true);
-    const std::uint8_t want_both[] = {
+    const uint8_t want_both[] = {
         0xD2, 0xFC, 0x45,
         0x02, 0xD0, 0x07,
         0x21, 0x01,
@@ -523,7 +523,7 @@ static void test_flags_after_adds()
 
     p.setTriggerBased(false);
     p.setEncrypted(false);
-    const std::uint8_t want_cleared[] = {
+    const uint8_t want_cleared[] = {
         0xD2, 0xFC, 0x40,
         0x02, 0xD0, 0x07,
         0x21, 0x01,
@@ -539,9 +539,9 @@ static void test_accessor_idempotence()
     BTHome::Packet<8> p;
     p.add(BTHome::battery(50));
 
-    std::uint8_t snapshot[8] = {};
-    const std::size_t size_before = p.size();
-    std::memcpy(snapshot, p.data(), size_before);
+    uint8_t snapshot[8] = {};
+    const size_t size_before = p.size();
+    memcpy(snapshot, p.data(), size_before);
 
     (void) p.add(BTHome::humidity(40.0f)); // rejected (capacity)
     (void) p.data();
@@ -559,7 +559,7 @@ static void test_text_and_raw()
     {
         BTHome::Packet<31> p;
         expect_true("text add ok", p.add(BTHome::text("Hello World!")));
-        const std::uint8_t want_sd[] = {
+        const uint8_t want_sd[] = {
             0xD2, 0xFC, 0x40,
             0x53, 0x0C, 0x48, 0x65, 0x6C, 0x6C, 0x6F, 0x20, 0x57, 0x6F, 0x72, 0x6C, 0x64, 0x21,
         };
@@ -570,9 +570,9 @@ static void test_text_and_raw()
     // Expects: [54][len][bytes] with the extra length byte.
     {
         BTHome::Packet<31> p;
-        const std::uint8_t payload[] = {0xDE, 0xAD, 0xBE, 0xEF};
+        const uint8_t payload[] = {0xDE, 0xAD, 0xBE, 0xEF};
         expect_true("raw add ok", p.add(BTHome::raw(payload, sizeof(payload))));
-        const std::uint8_t want_sd[] = {0xD2, 0xFC, 0x40, 0x54, 0x04, 0xDE, 0xAD, 0xBE, 0xEF};
+        const uint8_t want_sd[] = {0xD2, 0xFC, 0x40, 0x54, 0x04, 0xDE, 0xAD, 0xBE, 0xEF};
         expect_bytes("raw entry", p.serviceData(), p.serviceDataSize(), want_sd, sizeof(want_sd));
     }
 
@@ -584,7 +584,7 @@ static void test_text_and_raw()
         p.add(BTHome::conductivity(3120.0f));
         p.add(BTHome::temperature(21.53f));
         p.add(BTHome::battery(87));
-        const std::uint8_t want_sd[] = {
+        const uint8_t want_sd[] = {
             0xD2, 0xFC, 0x40,
             0x01, 0x57,
             0x02, 0x69, 0x08,
@@ -613,7 +613,7 @@ static void test_text_and_raw()
         expect_true("packet untouched after rejection", p.size() == 5);
 
         expect_true("fitting text accepted", p.add(BTHome::text("abc"))); // needs 2+3=5
-        const std::uint8_t want_sd[] = {0xD2, 0xFC, 0x40, 0x53, 0x03, 'a', 'b', 'c'};
+        const uint8_t want_sd[] = {0xD2, 0xFC, 0x40, 0x53, 0x03, 'a', 'b', 'c'};
         expect_bytes("small packet with text", p.serviceData(), p.serviceDataSize(), want_sd, sizeof(want_sd));
     }
 
@@ -624,16 +624,16 @@ static void test_text_and_raw()
         p.add(BTHome::battery(87));
         p.add(BTHome::text("ok"));
 
-        std::uint8_t adv[31] = {};
+        uint8_t adv[31] = {};
         const int adv_size = BTHome::build_advertising(p, adv, sizeof(adv));
-        const std::uint8_t want[] = {
+        const uint8_t want[] = {
             0x02, 0x01, 0x06,
             0x0A, 0x16, 0xD2, 0xFC, 0x40,
             0x01, 0x57,
             0x53, 0x02, 'o', 'k',
         };
         expect_true("adv with text build success", adv_size >= 0);
-        expect_bytes("adv with text payload", adv, static_cast<std::size_t>(adv_size), want, sizeof(want));
+        expect_bytes("adv with text payload", adv, static_cast<size_t>(adv_size), want, sizeof(want));
     }
 }
 
@@ -646,7 +646,7 @@ static void test_events()
         BTHome::Packet<31> p;
         p.add(BTHome::button_event(BTHome::ButtonEventType::None));
         p.add(BTHome::button_event(BTHome::ButtonEventType::Press));
-        const std::uint8_t want_sd[] = {0xD2, 0xFC, 0x40, 0x3A, 0x00, 0x3A, 0x01};
+        const uint8_t want_sd[] = {0xD2, 0xFC, 0x40, 0x3A, 0x00, 0x3A, 0x01};
         expect_bytes("multi-button spec example 3A003A01", p.serviceData(), p.serviceDataSize(), want_sd, sizeof(want_sd));
     }
 
@@ -658,7 +658,7 @@ static void test_events()
         p.add(BTHome::dimmer_event(BTHome::DimmerEventType::RotateLeft, 3));
         p.add(BTHome::command_event(BTHome::CommandEventType::StepUp, 5));
         p.add(BTHome::button_event(BTHome::ButtonEventType::LongPress));
-        const std::uint8_t want_sd[] = {0xD2, 0xFC, 0x40, 0x3A, 0x04,
+        const uint8_t want_sd[] = {0xD2, 0xFC, 0x40, 0x3A, 0x04,
                                         0x3B, 0x01, 0x03, 0x05, 0x3C, 0x01, 0x03};
         expect_bytes("button + command + dimmer", p.serviceData(), p.serviceDataSize(), want_sd, sizeof(want_sd));
     }
@@ -670,7 +670,7 @@ static void test_events()
         p.add(BTHome::button_event(BTHome::ButtonEventType::Press));
         p.add(BTHome::temperature(20.0f));
         p.add(BTHome::packet_id(5));
-        const std::uint8_t want_sd[] = {0xD2, 0xFC, 0x40, 0x00, 0x05, 0x02, 0xD0, 0x07, 0x3A, 0x01};
+        const uint8_t want_sd[] = {0xD2, 0xFC, 0x40, 0x00, 0x05, 0x02, 0xD0, 0x07, 0x3A, 0x01};
         expect_bytes("event sorts after measurements", p.serviceData(), p.serviceDataSize(), want_sd, sizeof(want_sd));
     }
 }

@@ -26,16 +26,16 @@ namespace BTHome
  *
  * @return true on success, false on any PSA error.
  */
-inline bool psa_ccm_backend(const std::uint8_t *key,
-                            const std::uint8_t *nonce,
-                            const std::uint8_t *plaintext,
-                            std::size_t length,
-                            std::uint8_t *ciphertext,
-                            std::uint8_t *mic)
+inline bool psa_ccm_backend(const uint8_t *key,
+                            const uint8_t *nonce,
+                            const uint8_t *plaintext,
+                            size_t length,
+                            uint8_t *ciphertext,
+                            uint8_t *mic)
 {
     // PSA emits ciphertext and tag contiguously; BTHome places the counter
     // between them, so encrypt into a stack buffer and split afterwards.
-    std::uint8_t buffer[64];
+    uint8_t buffer[64];
     if (length + Encryptor::kMicBytes > sizeof(buffer))
     {
         return false;
@@ -60,7 +60,7 @@ inline bool psa_ccm_backend(const std::uint8_t *key,
         return false;
     }
 
-    std::size_t out_len = 0;
+    size_t out_len = 0;
     const bool ok =
         psa_aead_encrypt(key_id, alg, nonce, Encryptor::kNonceBytes, nullptr, 0,
                          plaintext, length, buffer, sizeof(buffer), &out_len) == PSA_SUCCESS &&

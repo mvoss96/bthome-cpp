@@ -1,10 +1,11 @@
 #pragma once
 
-#include <cstddef>
-#include <cstdint>
-// <string.h> instead of <cstring>: Zephyr's minimal C++ library ships no
-// C++ wrapper headers (only cstddef/cstdint/new), but the C header exists on
-// every supported libc. Calls are therefore unqualified (memcpy, not std::memcpy).
+#include <stddef.h>
+#include <stdint.h>
+// C headers (<stdint.h>/<stddef.h>/<string.h>) instead of the C++ wrappers:
+// avr-gcc ships no libstdc++ wrapper headers at all, and Zephyr's minimal C++
+// library lacks <cstring>. The C headers exist on every supported toolchain,
+// so types and calls stay unqualified (uint8_t, memcpy - no std::).
 #include <string.h>
 
 #include "bthome_defs.h"
@@ -12,24 +13,24 @@
 namespace BTHome
 {
 
-template <std::size_t Capacity>
+template <size_t Capacity>
 class Packet
 {
 private:
-    static constexpr std::size_t kHeaderBytes = BTHome::ServiceDataHeader::kByteCount; // [len][type][uuid lo][uuid hi][device-info]
+    static constexpr size_t kHeaderBytes = BTHome::ServiceDataHeader::kByteCount; // [len][type][uuid lo][uuid hi][device-info]
     static_assert(Capacity >= kHeaderBytes, "Capacity must hold the BTHome header");   // Capacity must fit fixed header bytes.
     static_assert(Capacity <= 255, "AD element length byte limits Capacity to 255");
-    static constexpr std::size_t kMaxItems = (Capacity - kHeaderBytes) / 2 + 1; // Worst-case entry count; exact fit is checked in insert().
+    static constexpr size_t kMaxItems = (Capacity - kHeaderBytes) / 2 + 1; // Worst-case entry count; exact fit is checked in insert().
 
     // The serialized AD element is the single source of truth: measurements are
     // inserted in canonical (ascending object-id) order directly into m_buf.
     // m_offsets tracks where each entry starts, so insertion positions can be
     // found without knowing the value width of already-stored object ids.
     BTHome::ServiceDataHeader m_header = {}; // Header model incl. device-info flags.
-    std::uint8_t m_buf[Capacity] = {};       // Final AD element bytes.
-    std::size_t m_size = kHeaderBytes;       // Current used bytes in m_buf.
-    std::uint8_t m_offsets[kMaxItems] = {};  // Start offset of each entry in m_buf, ascending.
-    std::size_t m_count = 0;                 // Number of entries.
+    uint8_t m_buf[Capacity] = {};       // Final AD element bytes.
+    size_t m_size = kHeaderBytes;       // Current used bytes in m_buf.
+    uint8_t m_offsets[kMaxItems] = {};  // Start offset of each entry in m_buf, ascending.
+    size_t m_count = 0;                 // Number of entries.
 
 public:
     /**
@@ -38,7 +39,7 @@ public:
     Packet()
     {
         m_header.writeTo(m_buf);
-        m_buf[0] = static_cast<std::uint8_t>(m_size - 1);
+        m_buf[0] = static_cast<uint8_t>(m_size - 1);
     }
 
     /**
@@ -94,7 +95,7 @@ public:
      * @brief Returns the full AD element bytes.
      * @return Pointer to bytes formatted as [len][0x16][uuid lo][uuid hi][device-info][measurements...].
      */
-    const std::uint8_t *data() const
+    const uint8_t *data() const
     {
         return m_buf;
     }
@@ -103,7 +104,7 @@ public:
      * @brief Returns the current AD element size in bytes.
      * @return Number of bytes currently used in the packet buffer.
      */
-    std::size_t size() const
+    size_t size() const
     {
         return m_size;
     }
@@ -112,7 +113,7 @@ public:
      * @brief Returns the service-data value bytes without AD length/type prefix.
      * @return Pointer to bytes formatted as [uuid lo][uuid hi][device-info][measurements...].
      */
-    const std::uint8_t *serviceData() const
+    const uint8_t *serviceData() const
     {
         return m_buf + 2;
     }
@@ -121,7 +122,7 @@ public:
      * @brief Returns the size of the service-data value (without AD length/type prefix).
      * @return Number of bytes in serviceData().
      */
-    std::size_t serviceDataSize() const
+    size_t serviceDataSize() const
     {
         return m_size - 2;
     }
@@ -135,48 +136,48 @@ private:
      * @param with_len_byte true to serialize as [id][len][bytes] (Text/Raw), false for [id][bytes].
      * @return true if insertion succeeded, false on capacity overflow.
      */
-    bool insert(std::uint8_t id, const std::uint8_t *value, std::size_t vlen, bool with_len_byte)
+    bool insert(uint8_t id, const uint8_t *value, size_t vlen, bool with_len_byte)
     {
         if (m_count >= kMaxItems)
         {
             return false;
         }
 
-        const std::size_t need = 1 + (with_len_byte ? 1 : 0) + vlen;
+        const size_t need = 1 + (with_len_byte ? 1 : 0) + vlen;
         if (m_size + need > Capacity)
         {
             return false;
         }
 
         // Find first entry whose object_id exceeds id (stable for equal ids).
-        std::size_t k = 0;
+        size_t k = 0;
         while (k < m_count && m_buf[m_offsets[k]] <= id)
         {
             ++k;
         }
-        const std::size_t pos = (k == m_count) ? m_size : m_offsets[k];
+        const size_t pos = (k == m_count) ? m_size : m_offsets[k];
 
         // Shift the buffer tail up by `need` bytes (memmove: regions overlap).
         memmove(m_buf + pos + need, m_buf + pos, m_size - pos);
 
         // Shift the offsets of the moved entries and record the new one.
-        for (std::size_t j = m_count; j > k; --j)
+        for (size_t j = m_count; j > k; --j)
         {
-            m_offsets[j] = static_cast<std::uint8_t>(m_offsets[j - 1] + need);
+            m_offsets[j] = static_cast<uint8_t>(m_offsets[j - 1] + need);
         }
-        m_offsets[k] = static_cast<std::uint8_t>(pos);
+        m_offsets[k] = static_cast<uint8_t>(pos);
         ++m_count;
 
         // Write the entry and finalize the AD length byte.
-        std::size_t p = pos;
+        size_t p = pos;
         m_buf[p++] = id;
         if (with_len_byte)
         {
-            m_buf[p++] = static_cast<std::uint8_t>(vlen);
+            m_buf[p++] = static_cast<uint8_t>(vlen);
         }
         memcpy(m_buf + p, value, vlen);
         m_size += need;
-        m_buf[0] = static_cast<std::uint8_t>(m_size - 1);
+        m_buf[0] = static_cast<uint8_t>(m_size - 1);
         return true;
     }
 };
