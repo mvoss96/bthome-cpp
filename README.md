@@ -30,9 +30,9 @@ Pinning a git tag works as well:
 
 ### Arduino
 
-Put this repository in your Arduino libraries folder (or install a GitHub
-release ZIP), add a BLE stack library such as NimBLE-Arduino, include
-`bthome.h`.
+Install **bthome-cpp** via the IDE's Library Manager (or put this repository
+in your Arduino libraries folder), add a BLE stack library such as
+NimBLE-Arduino, include `bthome.h`.
 
 ### ESP-IDF
 
