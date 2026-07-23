@@ -17,59 +17,34 @@ Dependency-free C++17 BTHome v2 payload builder.
 
 ## Install
 
-### Arduino
-
-1. Put this repository in your Arduino libraries folder (or install from GitHub ZIP).
-2. Add a BLE stack library such as NimBLE-Arduino.
-3. Include `bthome.h`.
-
 ### PlatformIO
 
-Add this repository as a library dependency (for example via `lib_deps`), then include `bthome.h`.
+Published in the [PlatformIO Registry](https://registry.platformio.org/libraries/mvoss96/bthome-cpp):
+
+```ini
+lib_deps = mvoss96/bthome-cpp@^0.3.0
+```
+
+Pinning a git tag works as well:
+`lib_deps = https://github.com/mvoss96/bthome-cpp.git#v0.3.0`
+
+### Arduino
+
+Install **bthome-cpp** via the IDE's Library Manager (or put this repository
+in your Arduino libraries folder), add a BLE stack library such as
+NimBLE-Arduino, include `bthome.h`.
 
 ### ESP-IDF
 
-Use one of these options:
+Add the repo under your project's `components/` folder (it ships an
+`idf_component.yml`) — see [examples/esp_idf](examples/esp_idf) for a
+complete project.
 
-1. Add this repo as a component under your project's `components/` folder.
-2. Or add `src` to your include path in your component CMake file.
+### Zephyr / nRF Connect SDK
 
-This repo contains ESP-IDF example wiring in `examples/esp_idf`.
-
-### Zephyr
-
-Add this repository to your workspace and include `src` in your target include directories.
-
-This repo contains a Zephyr example in `examples/zephyr`.
-
-Direct west integration from Git is also supported via Zephyr module metadata.
-
-Example `west.yml` snippet:
-
-```yaml
-manifest:
-    projects:
-        - name: bthome-cpp
-            url: https://github.com/mvoss96/bthome-cpp
-            revision: main
-            path: modules/lib/bthome-cpp
-```
-
-Then initialize/update your workspace:
-
-```bash
-west init -m <your-manifest-repo-url> zephyr-workspace
-cd zephyr-workspace
-west update
-```
-
-Build for nRF52840 DK:
-
-```bash
-west build -b nrf52840dk/nrf52840 <your-app-path> -p always
-```
-
-For nRF52840 Dongle use board `nrf52840dongle/nrf52840`.
+Add the repo as a Zephyr module (west manifest or workspace checkout) — see
+[examples/zephyr/README.md](examples/zephyr/README.md) for the `west.yml`
+snippet, build commands and board notes.
 
 ## Minimal usage
 
