@@ -6,7 +6,10 @@
 namespace BTHome
 {
 
-    inline constexpr uint16_t kServiceUuid = 0xFCD2;
+    // Plain constexpr (internal linkage per TU) instead of a C++17 inline
+    // variable: one copy of a 2-byte constant per TU is a non-issue and it
+    // keeps the library C++11-compatible.
+    constexpr uint16_t kServiceUuid = 0xFCD2;
 
     // A single encoded measurement: object id plus its little-endian value bytes.
     // Produced by the BTHome::* factories.
@@ -41,12 +44,12 @@ namespace BTHome
         bool m_trigger_based = false; // bit 2
         uint8_t m_version = 2;   // bits 5..7
 
+        // Single-expression body: C++11 constexpr allows no locals.
         constexpr uint8_t toByte() const
         {
-            const uint8_t version_bits = static_cast<uint8_t>((m_version & 0x07u) << 5);
-            const uint8_t encrypted_bit = m_encrypted ? kEncryptedBit : 0u;
-            const uint8_t trigger_bit = m_trigger_based ? kTriggerBasedBit : 0u;
-            return static_cast<uint8_t>(version_bits | encrypted_bit | trigger_bit);
+            return static_cast<uint8_t>(((m_version & 0x07u) << 5) |
+                                        (m_encrypted ? kEncryptedBit : 0u) |
+                                        (m_trigger_based ? kTriggerBasedBit : 0u));
         }
     };
 
@@ -59,7 +62,9 @@ namespace BTHome
 
         DeviceInfo m_device_info = {};
 
-        constexpr void writeTo(uint8_t *out) const
+        // Not constexpr: writing through a pointer needs C++14 relaxed
+        // constexpr, and no caller evaluates this at compile time anyway.
+        void writeTo(uint8_t *out) const
         {
             out[0] = 0; // length is finalized after payload is written
             out[1] = kAdTypeServiceData16;

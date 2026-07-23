@@ -1,6 +1,6 @@
 # BTHome-cpp
 
-Dependency-free C++17 BTHome v2 payload builder.
+Dependency-free C++11 BTHome v2 payload builder.
 
 - Header-only library
 - No heap allocation
@@ -34,14 +34,12 @@ Install **bthome-cpp** via the IDE's Library Manager (or put this repository
 in your Arduino libraries folder), add a BLE stack library such as
 NimBLE-Arduino, include `bthome.h`.
 
-AVR boards (avr-gcc) are supported too: the library uses only the C standard
-headers (`<stdint.h>`/`<stddef.h>`/`<string.h>`), which every toolchain ships —
+AVR boards (avr-gcc) are supported too, including the stock AVR core with its
+`gnu++11` default: the library needs only C++11 and the C standard headers
+(`<stdint.h>`/`<stddef.h>`/`<string.h>`), which every toolchain ships —
 including avr-gcc, which has no libstdc++ wrapper headers. Pair it with
 whatever radio transports the bytes (BTHome itself is transport-agnostic); see
-`examples/arduino_avr`. Note the C++17 requirement: cores like
-[MiniCore](https://github.com/MCUdude/MiniCore) build with `gnu++17` out of the
-box, the stock AVR core needs
-`--build-property compiler.cpp.extra_flags=-std=gnu++17` (arduino-cli).
+`examples/arduino_avr`.
 
 ### ESP-IDF
 
