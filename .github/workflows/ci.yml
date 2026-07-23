@@ -32,6 +32,21 @@ jobs:
           ./build/test_encryption
           ./build/demo_encrypted
 
+  manifests:
+    # library.properties (Arduino) and library.json (PlatformIO) both carry a
+    # version field; library.json silently sat at 0.1.0 for two releases.
+    # This gate keeps them in lockstep; release.yml additionally checks the
+    # tag against both on release.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Manifest versions must match
+        run: |
+          PROPS=$(grep '^version=' library.properties | cut -d= -f2)
+          JSON=$(python3 -c "import json; print(json.load(open('library.json'))['version'])")
+          echo "library.properties=$PROPS library.json=$JSON"
+          test "$PROPS" = "$JSON"
+
   interop:
     # Independent oracle: every advertisement this library builds is decoded
     # with bthome-ble - the parser Home Assistant runs - and must yield the
