@@ -31,3 +31,14 @@ jobs:
             --verify-tag \
             --title "$GITHUB_REF_NAME" \
             --generate-notes
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Publish to PlatformIO registry
+        # Authenticated via the PLATFORMIO_AUTH_TOKEN repository secret
+        # (generate with `pio account token`, store with `gh secret set`).
+        env:
+          PLATFORMIO_AUTH_TOKEN: ${{ secrets.PLATFORMIO_AUTH_TOKEN }}
+        run: |
+          pip install platformio
+          pio pkg publish --no-interactive

@@ -1,0 +1,54 @@
+name: Registry canary
+
+# Builds the Arduino examples the way real users consume the library - from
+# the PlatformIO registry and the Arduino Library Manager index - to catch
+# broken published packages or index drift. The Examples workflow deliberately
+# keeps building against the checkout: its job is validating changes, this
+# one's is validating what the registries actually serve.
+on:
+  schedule:
+    - cron: "30 6 * * 1"  # Mondays 06:30 UTC, after the broadcaster's canary
+  workflow_dispatch:
+
+jobs:
+  platformio-registry:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        example: [arduino_nimble, arduino_nimble_encrypted]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install PlatformIO
+        run: pip install platformio
+      - name: Build example against the registry package
+        run: >
+          pio ci examples/${{ matrix.example }}
+          --board esp32dev
+          --project-option="platform=https://github.com/pioarduino/platform-espressif32/releases/download/stable/platform-espressif32.zip"
+          --project-option="framework=arduino"
+          --project-option="lib_deps=h2zero/NimBLE-Arduino, mvoss96/bthome-cpp"
+
+  arduino-library-manager:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        example: [arduino_nimble, arduino_nimble_encrypted]
+    env:
+      ESP32_INDEX: https://espressif.github.io/arduino-esp32/package_esp32_index.json
+    steps:
+      - uses: actions/checkout@v5
+      - uses: arduino/setup-arduino-cli@v2
+      - name: Install esp32 core and libraries from the public indexes
+        run: |
+          arduino-cli core update-index --additional-urls "$ESP32_INDEX"
+          arduino-cli core install esp32:esp32 --additional-urls "$ESP32_INDEX"
+          arduino-cli lib update-index
+          arduino-cli lib install bthome-cpp
+          arduino-cli lib install NimBLE-Arduino
+      - name: Build example
+        run: arduino-cli compile --fqbn esp32:esp32:esp32 examples/${{ matrix.example }}
