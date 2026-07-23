@@ -56,6 +56,33 @@ jobs:
       - name: Build example
         run: arduino-cli compile --fqbn esp32:esp32:esp32 --warnings more examples/${{ matrix.example }}
 
+  arduino-avr:
+    # Classic AVR (avr-gcc): no libstdc++ wrapper headers exist there, so this
+    # job proves the C-standard-header approach keeps the library buildable
+    # on ATmega boards (Uno/Nano/Pro Mini).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: arduino/setup-arduino-cli@v2
+      - uses: actions/cache@v4
+        with:
+          path: ~/.arduino15
+          key: arduino-cli-avr-${{ runner.os }}
+      - name: Install avr core and library
+        run: |
+          arduino-cli core update-index
+          arduino-cli core install arduino:avr
+          mkdir -p ~/Arduino/libraries
+          cp -r "$GITHUB_WORKSPACE" ~/Arduino/libraries/bthome-cpp
+      - name: Build example
+        # The stock AVR core builds gnu++11 by default; the library needs
+        # C++17, so pass the flag explicitly (cores like MiniCore default
+        # to gnu++17 and need nothing).
+        run: >
+          arduino-cli compile --fqbn arduino:avr:uno --warnings more
+          --build-property compiler.cpp.extra_flags=-std=gnu++17
+          examples/arduino_avr
+
   platformio:
     # Covers the PlatformIO consumer path (the README's lib_deps install and
     # how esphome-bthome-broadcaster pulls this library), using pioarduino -

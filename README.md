@@ -37,7 +37,11 @@ NimBLE-Arduino, include `bthome.h`.
 AVR boards (avr-gcc) are supported too: the library uses only the C standard
 headers (`<stdint.h>`/`<stddef.h>`/`<string.h>`), which every toolchain ships —
 including avr-gcc, which has no libstdc++ wrapper headers. Pair it with
-whatever radio transports the bytes (BTHome itself is transport-agnostic).
+whatever radio transports the bytes (BTHome itself is transport-agnostic); see
+`examples/arduino_avr`. Note the C++17 requirement: cores like
+[MiniCore](https://github.com/MCUdude/MiniCore) build with `gnu++17` out of the
+box, the stock AVR core needs
+`--build-property compiler.cpp.extra_flags=-std=gnu++17` (arduino-cli).
 
 ### ESP-IDF
 
@@ -175,6 +179,7 @@ pip install bthome-ble
 
 ## Examples
 
+- Arduino AVR, payload building without a BLE stack: `examples/arduino_avr/arduino_avr.ino`
 - Arduino NimBLE: `examples/arduino_nimble/arduino_nimble.ino`
 - Arduino NimBLE encrypted (MAC + Preferences counter): `examples/arduino_nimble_encrypted/arduino_nimble_encrypted.ino`
 - ESP-IDF: `examples/esp_idf/main/main.cpp`
