@@ -264,6 +264,25 @@ int main()
         emit_packet("dimmer_rotate_right_10", p,
                     "{\"kind\":\"event\",\"key\":\"dimmer\",\"value\":\"rotate_right\",\"steps\":10}");
     }
+    {
+        // Multi-dimmer padding: None for dimmer 1 (must be 3C 00 00 - a
+        // 1-byte None desynchronises the parser), rotate for dimmer 2.
+        BTHome::Packet<31> p;
+        p.add(BTHome::dimmer_event(BTHome::DimmerEventType::None));
+        p.add(BTHome::dimmer_event(BTHome::DimmerEventType::RotateRight, 1));
+        emit_packet("dimmer2_rotate_right", p,
+                    "{\"kind\":\"event\",\"key\":\"dimmer_2\",\"value\":\"rotate_right\",\"steps\":1}");
+    }
+    {
+        // Regression for the 1-byte None bug: sensors sharing a packet with a
+        // None dimmer event must still be parsed.
+        BTHome::Packet<31> p;
+        p.add(BTHome::packet_id(123));
+        p.add(BTHome::battery(52));
+        p.add(BTHome::dimmer_event(BTHome::DimmerEventType::None));
+        emit_packet("sensors_with_dimmer_none", p,
+                    "{\"kind\":\"sensor\",\"key\":\"battery\",\"value\":52,\"tolerance\":0.5}");
+    }
 
     {
         BTHome::Packet<31> p;

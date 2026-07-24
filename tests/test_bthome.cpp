@@ -663,6 +663,17 @@ static void test_events()
         expect_bytes("button + command + dimmer", p.serviceData(), p.serviceDataSize(), want_sd, sizeof(want_sd));
     }
 
+    // Tests: Multi-dimmer padding - None for dimmer 1, rotate for dimmer 2.
+    // Expects: None carries its steps byte (3C 00 00), so receivers stay in
+    // sync and can attribute the rotate event to instance 2.
+    {
+        BTHome::Packet<31> p;
+        p.add(BTHome::dimmer_event(BTHome::DimmerEventType::None));
+        p.add(BTHome::dimmer_event(BTHome::DimmerEventType::RotateRight, 1));
+        const uint8_t want_sd[] = {0xD2, 0xFC, 0x40, 0x3C, 0x00, 0x00, 0x3C, 0x02, 0x01};
+        expect_bytes("multi-dimmer None padding 3C0000", p.serviceData(), p.serviceDataSize(), want_sd, sizeof(want_sd));
+    }
+
     // Tests: An event mixed with measurements and packet_id.
     // Expects: Canonical object-id order: packet_id (0x00) < temperature (0x02) < button (0x3A).
     {
