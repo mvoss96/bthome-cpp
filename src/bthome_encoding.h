@@ -82,22 +82,32 @@ namespace BTHome
             return m;
         }
 
+        // The object id is a template parameter, not a function parameter, on
+        // purpose. Inside the function a parameter is not a constant
+        // expression, so object_layout() would be an ordinary call - and at
+        // -Os, which is what Arduino, ESP-IDF and Zephyr build with, gcc
+        // declines to inline a ~90-case switch. As a template argument the
+        // lookup is evaluated by the language: the width, factor and clamp
+        // bounds are baked in, the switch is never emitted for the encode
+        // path, and a wrong id is a compile error instead of a silent
+        // zero-length payload.
+
         /**
          * @brief Encode a sensor value using the scaling rules of object_layout().
-         * @param id BTHome sensor object ID.
+         * @tparam Id BTHome sensor object ID.
          * @param value Physical value to encode.
          * @return Encoded Measurement.
          */
-        inline Measurement make_sensor(SensorObjectId id, float value)
+        template <auto Id>
+        inline Measurement make_sensor(float value)
         {
-            const ObjectLayout l = object_layout(oid(id));
+            constexpr uint8_t byte_id = oid(Id);
+            constexpr ObjectLayout l = object_layout(byte_id);
+            static_assert(l.scaled, "make_sensor() is for float-scaled objects only");
+
             Measurement m;
-            m.object_id = oid(id);
+            m.object_id = byte_id;
             m.len = l.width;
-            if (l.width == 0)
-            {
-                return m; // unknown object id - nothing to encode
-            }
 
             // Scale to raw integer units and round half away from zero.
             const float units = value / l.factor;
@@ -149,43 +159,53 @@ namespace BTHome
 
         /**
          * @brief Encode an unsigned value; the width comes from object_layout().
-         * @tparam ObjectId Enum type of the object ID.
-         * @param id Object ID.
+         * @tparam Id Object ID.
          * @param raw Unsigned raw value.
          * @return Encoded Measurement.
          */
-        template <typename ObjectId>
-        inline Measurement u(ObjectId id, uint64_t raw)
+        template <auto Id>
+        inline Measurement u(uint64_t raw)
         {
-            return make_u(oid(id), raw, object_layout(oid(id)).width);
+            constexpr uint8_t byte_id = oid(Id);
+            constexpr ObjectLayout l = object_layout(byte_id);
+            static_assert(l.width != 0 && !l.variable, "object id has no fixed width");
+            static_assert(!l.scaled, "scaled objects must go through make_sensor()");
+            return make_u(byte_id, raw, l.width);
         }
 
         /**
          * @brief Encode a signed value; the width comes from object_layout().
-         * @tparam ObjectId Enum type of the object ID.
-         * @param id Object ID.
+         * @tparam Id Object ID.
          * @param raw Signed raw value.
          * @return Encoded Measurement.
          */
-        template <typename ObjectId>
-        inline Measurement s(ObjectId id, int64_t raw)
+        template <auto Id>
+        inline Measurement s(int64_t raw)
         {
-            return make_s(oid(id), raw, object_layout(oid(id)).width);
+            constexpr uint8_t byte_id = oid(Id);
+            constexpr ObjectLayout l = object_layout(byte_id);
+            static_assert(l.width != 0 && !l.variable, "object id has no fixed width");
+            static_assert(l.is_signed, "object id is not a signed object");
+            static_assert(!l.scaled, "scaled objects must go through make_sensor()");
+            return make_s(byte_id, raw, l.width);
         }
 
         /**
          * @brief Encode a boolean value; the width comes from object_layout().
-         * @tparam ObjectId Enum type of the object ID.
-         * @param id Object ID.
+         * @tparam Id Object ID.
          * @param on Boolean payload value.
          * @return Encoded Measurement.
          */
-        template <typename ObjectId>
-        inline Measurement b(ObjectId id, bool on)
+        template <auto Id>
+        inline Measurement b(bool on)
         {
+            constexpr uint8_t byte_id = oid(Id);
+            constexpr ObjectLayout l = object_layout(byte_id);
+            static_assert(l.kind == ObjectKind::Binary, "b() is for binary sensors only");
+
             Measurement m;
-            m.object_id = oid(id);
-            m.len = object_layout(oid(id)).width;
+            m.object_id = byte_id;
+            m.len = l.width;
             m.data[0] = on ? 1 : 0;
             return m;
         }
