@@ -133,18 +133,17 @@ namespace BTHome
         return m;
     }
 
-    // None carries no step byte; rotate events carry the number of steps.
+    // The dimmer object is a fixed 2-value-byte object: [event][steps], the
+    // steps byte is always present (spec example 3C0000 for None). Receivers
+    // parse it with a fixed length - omitting the byte desynchronises them
+    // and the whole advertisement gets discarded.
     inline Measurement dimmer_event(DimmerEventType e, uint8_t steps = 1)
     {
         Measurement m;
         m.object_id = static_cast<uint8_t>(EventObjectId::DimmerEvent);
         m.data[0] = static_cast<uint8_t>(e);
-        m.len = 1;
-        if (e != DimmerEventType::None)
-        {
-            m.data[1] = steps;
-            m.len = 2;
-        }
+        m.data[1] = (e == DimmerEventType::None) ? 0 : steps;
+        m.len = 2;
         return m;
     }
 

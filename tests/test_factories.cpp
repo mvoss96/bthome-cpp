@@ -143,8 +143,8 @@ int main()
         {"window(true)", BTHome::window(true), 0x2D, 1, {0x01}},
     };
 
-    // Event factories: button = 1 event byte; dimmer = event byte plus a step
-    // count for rotate events (None stays 1 byte, per spec example 3C00).
+    // Event factories: button = 1 event byte; dimmer = fixed 2 value bytes
+    // (event + steps, steps 0 for None per spec example 3C0000).
     const Case event_cases[] = {
         {"button_event(none)", BTHome::button_event(BTHome::ButtonEventType::None), 0x3A, 1, {0x00}},
         {"button_event(press)", BTHome::button_event(BTHome::ButtonEventType::Press), 0x3A, 1, {0x01}},
@@ -159,7 +159,9 @@ int main()
         {"command_event(toggle)", BTHome::command_event(BTHome::CommandEventType::Toggle), 0x3B, 2, {0x00, 0x02}},
         {"command_event(step_up, 5)", BTHome::command_event(BTHome::CommandEventType::StepUp, 5), 0x3B, 3, {0x01, 0x03, 0x05}},
         {"command_event(step_down, 5)", BTHome::command_event(BTHome::CommandEventType::StepDown, 5), 0x3B, 3, {0x01, 0x04, 0x05}},
-        {"dimmer_event(none)", BTHome::dimmer_event(BTHome::DimmerEventType::None), 0x3C, 1, {0x00}},
+        // Fixed 2-value-byte object: the steps byte is always present, None
+        // is the spec example 3C0000. A 1-byte None desynchronises receivers.
+        {"dimmer_event(none)", BTHome::dimmer_event(BTHome::DimmerEventType::None), 0x3C, 2, {0x00, 0x00}},
         {"dimmer_event(rotate_left, 3)", BTHome::dimmer_event(BTHome::DimmerEventType::RotateLeft, 3), 0x3C, 2, {0x01, 0x03}},
         {"dimmer_event(rotate_right, 10)", BTHome::dimmer_event(BTHome::DimmerEventType::RotateRight, 10), 0x3C, 2, {0x02, 0x0A}},
     };
