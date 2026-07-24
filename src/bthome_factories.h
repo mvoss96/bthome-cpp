@@ -13,8 +13,8 @@
 namespace BTHome
 {
     // Scalar measurements
-    inline Measurement packet_id(uint8_t v) { return detail::u8(MiscObjectId::PacketId, v); }
-    inline Measurement battery(uint8_t pct) { return detail::u8(SensorObjectId::Battery, pct); }
+    inline Measurement packet_id(uint8_t v) { return detail::u(MiscObjectId::PacketId, v); }
+    inline Measurement battery(uint8_t pct) { return detail::u(SensorObjectId::Battery, pct); }
     inline Measurement temperature(float c) { return detail::make_sensor(SensorObjectId::Temperature, c); }
     inline Measurement humidity(float pct) { return detail::make_sensor(SensorObjectId::Humidity, pct); }
     inline Measurement pressure(float hpa) { return detail::make_sensor(SensorObjectId::Pressure, hpa); }
@@ -22,7 +22,7 @@ namespace BTHome
     inline Measurement mass_kg(float kg) { return detail::make_sensor(SensorObjectId::MassKg, kg); }
     inline Measurement mass_lb(float lb) { return detail::make_sensor(SensorObjectId::MassLb, lb); }
     inline Measurement dewpoint(float c) { return detail::make_sensor(SensorObjectId::Dewpoint, c); }
-    inline Measurement count(uint8_t v) { return detail::u8(SensorObjectId::Count, v); }
+    inline Measurement count(uint8_t v) { return detail::u(SensorObjectId::Count, v); }
     inline Measurement energy(float kwh) { return detail::make_sensor(SensorObjectId::Energy, kwh); }
     inline Measurement power(float w) { return detail::make_sensor(SensorObjectId::Power, w); }
     inline Measurement voltage(float v) { return detail::make_sensor(SensorObjectId::Voltage, v); }
@@ -31,10 +31,10 @@ namespace BTHome
     inline Measurement co2(float ppm) { return detail::make_sensor(SensorObjectId::Co2, ppm); }
     inline Measurement tvoc(float ugm3) { return detail::make_sensor(SensorObjectId::Tvoc, ugm3); }
     inline Measurement moisture(float pct) { return detail::make_sensor(SensorObjectId::Moisture, pct); }
-    inline Measurement humidity_u8(uint8_t pct) { return detail::u8(SensorObjectId::HumidityU8, pct); }
-    inline Measurement moisture_u8(uint8_t pct) { return detail::u8(SensorObjectId::MoistureU8, pct); }
-    inline Measurement count_u16(uint16_t v) { return detail::u16(SensorObjectId::CountU16, v); }
-    inline Measurement count_u32(uint32_t v) { return detail::u32(SensorObjectId::CountU32, v); }
+    inline Measurement humidity_u8(uint8_t pct) { return detail::u(SensorObjectId::HumidityU8, pct); }
+    inline Measurement moisture_u8(uint8_t pct) { return detail::u(SensorObjectId::MoistureU8, pct); }
+    inline Measurement count_u16(uint16_t v) { return detail::u(SensorObjectId::CountU16, v); }
+    inline Measurement count_u32(uint32_t v) { return detail::u(SensorObjectId::CountU32, v); }
     inline Measurement rotation(float deg) { return detail::make_sensor(SensorObjectId::Rotation, deg); }
     inline Measurement distance_mm(float mm) { return detail::make_sensor(SensorObjectId::DistanceMm, mm); }
     inline Measurement distance_m(float m) { return detail::make_sensor(SensorObjectId::DistanceM, m); }
@@ -52,26 +52,26 @@ namespace BTHome
     inline Measurement energy_u32(float kwh) { return detail::make_sensor(SensorObjectId::EnergyU32, kwh); }
     inline Measurement volume_u32(float l) { return detail::make_sensor(SensorObjectId::VolumeU32, l); }
     inline Measurement water(float l) { return detail::make_sensor(SensorObjectId::Water, l); }
-    inline Measurement timestamp(uint32_t epoch_s) { return detail::u32(SensorObjectId::Timestamp, epoch_s); }
+    inline Measurement timestamp(uint32_t epoch_s) { return detail::u(SensorObjectId::Timestamp, epoch_s); }
     inline Measurement acceleration(float mps2) { return detail::make_sensor(SensorObjectId::Acceleration, mps2); }
     inline Measurement gyroscope(float dps) { return detail::make_sensor(SensorObjectId::Gyroscope, dps); }
     inline Measurement volume_storage(float l) { return detail::make_sensor(SensorObjectId::VolumeStorage, l); }
     inline Measurement conductivity(float us_cm) { return detail::make_sensor(SensorObjectId::Conductivity, us_cm); }
-    inline Measurement temperature_s8(int8_t c) { return detail::i8(SensorObjectId::TemperatureS8, c); }
+    inline Measurement temperature_s8(int8_t c) { return detail::s(SensorObjectId::TemperatureS8, c); }
     inline Measurement temperature_s8_035(float c) { return detail::make_sensor(SensorObjectId::TemperatureS8_035, c); }
-    inline Measurement count_s8(int8_t v) { return detail::i8(SensorObjectId::CountS8, v); }
-    inline Measurement count_s16(int16_t v) { return detail::i16(SensorObjectId::CountS16, v); }
-    inline Measurement count_s32(int32_t v) { return detail::i32(SensorObjectId::CountS32, v); }
+    inline Measurement count_s8(int8_t v) { return detail::s(SensorObjectId::CountS8, v); }
+    inline Measurement count_s16(int16_t v) { return detail::s(SensorObjectId::CountS16, v); }
+    inline Measurement count_s32(int32_t v) { return detail::s(SensorObjectId::CountS32, v); }
     inline Measurement power_s32(float w) { return detail::make_sensor(SensorObjectId::PowerS32, w); }
     inline Measurement current_s16(float a) { return detail::make_sensor(SensorObjectId::CurrentS16, a); }
     inline Measurement direction(float deg) { return detail::make_sensor(SensorObjectId::Direction, deg); }
     inline Measurement precipitation(float mm) { return detail::make_sensor(SensorObjectId::Precipitation, mm); }
-    inline Measurement channel(uint8_t v) { return detail::u8(SensorObjectId::Channel, v); }
+    inline Measurement channel(uint8_t v) { return detail::u(SensorObjectId::Channel, v); }
     inline Measurement rotational_speed(float rpm) { return detail::make_sensor(SensorObjectId::RotationalSpeed, rpm); }
     inline Measurement speed_s32(float mps) { return detail::make_sensor(SensorObjectId::SpeedS32, mps); }
     inline Measurement acceleration_s32(float mps2) { return detail::make_sensor(SensorObjectId::AccelerationS32, mps2); }
-    inline Measurement light_level(uint8_t v) { return detail::u8(SensorObjectId::LightLevel, v); }
-    inline Measurement settings_revision(uint8_t v) { return detail::u8(SensorObjectId::SettingsRevision, v); }
+    inline Measurement light_level(uint8_t v) { return detail::u(SensorObjectId::LightLevel, v); }
+    inline Measurement settings_revision(uint8_t v) { return detail::u(SensorObjectId::SettingsRevision, v); }
 
     // Variable-length objects. Input longer than VarMeasurement::kMaxBytes is
     // truncated (consistent with the clamping behavior of the scalar factories).
@@ -112,11 +112,13 @@ namespace BTHome
     // the same event packet may be advertised repeatedly for reliability.
     inline Measurement button_event(ButtonEventType e)
     {
-        return detail::u8(EventObjectId::ButtonEvent, static_cast<uint8_t>(e));
+        return detail::u(EventObjectId::ButtonEvent, static_cast<uint8_t>(e));
     }
 
     // Value layout: [argument count][opcode][arguments...] - spec examples
-    // 3B0002 (toggle) and 3B010305 (step up 5 steps).
+    // 3B0002 (toggle) and 3B010305 (step up 5 steps). The only object whose
+    // length cannot come from object_layout(): it depends on the payload
+    // itself, so this structure has to be known here and in the decoder.
     inline Measurement command_event(CommandEventType e, uint8_t steps = 1)
     {
         Measurement m;
@@ -143,14 +145,14 @@ namespace BTHome
         m.object_id = static_cast<uint8_t>(EventObjectId::DimmerEvent);
         m.data[0] = static_cast<uint8_t>(e);
         m.data[1] = (e == DimmerEventType::None) ? 0 : steps;
-        m.len = 2;
+        m.len = detail::object_layout(m.object_id).width;
         return m;
     }
 
     // Device objects
-    inline Measurement device_type_id(uint16_t v) { return detail::u16(DeviceObjectId::DeviceTypeId, v); }
-    inline Measurement firmware_version_u32(uint32_t v) { return detail::u32(DeviceObjectId::FirmwareVersionU32, v); }
-    inline Measurement firmware_version_u24(uint32_t v) { return detail::make_u(static_cast<uint8_t>(DeviceObjectId::FirmwareVersionU24), v, 3); }
+    inline Measurement device_type_id(uint16_t v) { return detail::u(DeviceObjectId::DeviceTypeId, v); }
+    inline Measurement firmware_version_u32(uint32_t v) { return detail::u(DeviceObjectId::FirmwareVersionU32, v); }
+    inline Measurement firmware_version_u24(uint32_t v) { return detail::u(DeviceObjectId::FirmwareVersionU24, v); }
 
     // Binary sensors
     inline Measurement generic_boolean(bool on) { return detail::b(BinaryObjectId::GenericBoolean, on); }
