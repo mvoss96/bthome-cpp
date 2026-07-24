@@ -20,6 +20,7 @@ jobs:
           mkdir -p build
           ${{ matrix.compiler }} -std=c++17 -fno-exceptions -fno-rtti -Wall -Wextra -Werror -I src tests/test_bthome.cpp -o build/test_bthome
           ${{ matrix.compiler }} -std=c++17 -fno-exceptions -fno-rtti -Wall -Wextra -Werror -I src tests/test_factories.cpp -o build/test_factories
+          ${{ matrix.compiler }} -std=c++17 -fno-exceptions -fno-rtti -Wall -Wextra -Werror -I src tests/test_decode.cpp -o build/test_decode
           ${{ matrix.compiler }} -std=c++17 -fno-exceptions -fno-rtti -Wall -Wextra -Werror -I src tests/test_encryption.cpp -lmbedcrypto -o build/test_encryption
       - name: Build host examples
         run: |
@@ -29,6 +30,7 @@ jobs:
         run: |
           ./build/test_bthome
           ./build/test_factories
+          ./build/test_decode
           ./build/test_encryption
           ./build/demo_encrypted
 

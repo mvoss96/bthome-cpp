@@ -14,6 +14,7 @@ Dependency-free C++17 BTHome v2 payload builder.
 2. Full raw advertising payload (Flags + BTHome service data) via `BTHome::build_advertising(...)`.
 3. All BTHome v2 object types, including variable-length Text (0x53) and Raw (0x54) via `BTHome::text(...)` / `BTHome::raw(...)`.
 4. AES-CCM encrypted payloads via `BTHome::EncryptedPacket<Capacity>` + `BTHome::build_encrypted_advertising(...)` with a pluggable cipher backend.
+5. Parsing service data back into typed objects via `BTHome::Decoder` — for receivers on transports without a BLE stack (ESP-NOW, nRF24, serial links).
 
 ## Install
 
@@ -108,6 +109,36 @@ if (n < 0)
 Result format:
 
 `[Flags AD][BTHome Service Data AD][optional Local Name AD]`
+
+## Decoding
+
+`BTHome::Decoder` iterates the objects of one service-data buffer in place
+(no heap, no callbacks) — the inverse of `Packet`, sharing the same
+width/scaling tables so encode and decode cannot drift apart:
+
+```cpp
+BTHome::Decoder dec(service_data, len); // [uuid lo][uuid hi][info][objects...]
+if (dec.valid() && !dec.encrypted())
+{
+    BTHome::Decoded obj;
+    while (dec.next(obj))
+    {
+        switch (obj.kind)
+        {
+        case BTHome::DecodedKind::Sensor:      /* obj.value (scaled) */ break;
+        case BTHome::DecodedKind::ButtonEvent: /* obj.event */ break;
+        case BTHome::DecodedKind::DimmerEvent: /* obj.event, obj.steps */ break;
+        case BTHome::DecodedKind::Text:        /* obj.bytes, obj.length */ break;
+        default: break;
+        }
+    }
+    if (!dec.ok()) { /* malformed or unknown object id: rest was skipped */ }
+}
+```
+
+Unknown object ids stop the iteration (their length is unknowable) and set
+`ok()` to false. Encrypted payloads are detected (`encrypted()`) but not
+decrypted — decrypt first, then feed the plaintext objects to a Decoder.
 
 ## Encryption (AES-CCM)
 
