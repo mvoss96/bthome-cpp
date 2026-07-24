@@ -1,10 +1,11 @@
 #pragma once
 
-#include <cstddef>
-#include <cstdint>
-// <string.h> instead of <cstring>: Zephyr's minimal C++ library ships no
-// C++ wrapper headers (only cstddef/cstdint/new), but the C header exists on
-// every supported libc. Calls are therefore unqualified (memcpy, not std::memcpy).
+#include <stddef.h>
+#include <stdint.h>
+// C headers (<stdint.h>/<stddef.h>/<string.h>) instead of the C++ wrappers:
+// avr-gcc ships no libstdc++ wrapper headers at all, and Zephyr's minimal C++
+// library lacks <cstring>. The C headers exist on every supported toolchain,
+// so types and calls stay unqualified (uint8_t, memcpy - no std::).
 #include <string.h>
 
 #include "bthome_packet.h"
@@ -22,26 +23,26 @@ namespace BTHome
  * @param complete_local_name true for AD type 0x09 (Complete Local Name), false for 0x08 (Shortened Local Name).
  * @return Payload size in bytes on success, or -1 on error.
  */
-template <std::size_t PacketCapacity>
+template <size_t PacketCapacity>
 int build_advertising(const Packet<PacketCapacity> &packet,
-                      std::uint8_t *out,
-                      std::size_t out_capacity,
+                      uint8_t *out,
+                      size_t out_capacity,
                       const char *local_name = nullptr,
                       bool complete_local_name = true)
 {
-    constexpr std::size_t kFlagsBytes = 3; // 02 01 06
+    constexpr size_t kFlagsBytes = 3; // 02 01 06
     if (out == nullptr)
     {
         return -1;
     }
 
-    const std::size_t local_name_len = (local_name != nullptr) ? strlen(local_name) : 0;
+    const size_t local_name_len = (local_name != nullptr) ? strlen(local_name) : 0;
     if (local_name_len > 0xFE)
     {
         return -1;
     }
 
-    const std::size_t total = kFlagsBytes + packet.size() + ((local_name_len > 0) ? (2 + local_name_len) : 0);
+    const size_t total = kFlagsBytes + packet.size() + ((local_name_len > 0) ? (2 + local_name_len) : 0);
     if (total > out_capacity)
     {
         return -1;
@@ -54,10 +55,10 @@ int build_advertising(const Packet<PacketCapacity> &packet,
     // Copy full BTHome service-data AD element directly after Flags AD.
     memcpy(out + kFlagsBytes, packet.data(), packet.size());
 
-    std::size_t p = kFlagsBytes + packet.size();
+    size_t p = kFlagsBytes + packet.size();
     if (local_name_len > 0)
     {
-        out[p++] = static_cast<std::uint8_t>(1 + local_name_len); // length of Local Name AD
+        out[p++] = static_cast<uint8_t>(1 + local_name_len); // length of Local Name AD
         out[p++] = complete_local_name ? 0x09 : 0x08;             // AD type: Complete or Shortened Local Name
         memcpy(out + p, local_name, local_name_len);         // Copy local name
         p += local_name_len;

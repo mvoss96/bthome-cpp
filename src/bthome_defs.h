@@ -1,20 +1,20 @@
 #pragma once
 
-#include <cstddef>
-#include <cstdint>
+#include <stddef.h>
+#include <stdint.h>
 
 namespace BTHome
 {
 
-    inline constexpr std::uint16_t kServiceUuid = 0xFCD2;
+    inline constexpr uint16_t kServiceUuid = 0xFCD2;
 
     // A single encoded measurement: object id plus its little-endian value bytes.
     // Produced by the BTHome::* factories.
     struct Measurement
     {
-        std::uint8_t object_id = 0;
-        std::uint8_t len = 0;      // number of value bytes (0..6)
-        std::uint8_t data[6] = {}; // little-endian value, `len` bytes used
+        uint8_t object_id = 0;
+        uint8_t len = 0;      // number of value bytes (0..6)
+        uint8_t data[6] = {}; // little-endian value, `len` bytes used
     };
 
     // A variable-length measurement for Text (0x53) and Raw (0x54) objects,
@@ -24,29 +24,29 @@ namespace BTHome
     {
         // Largest value that can ever fit one AD element: 31 bytes capacity
         // minus service-data header (5) minus object id and length byte (2).
-        static constexpr std::size_t kMaxBytes = 24;
+        static constexpr size_t kMaxBytes = 24;
 
-        std::uint8_t object_id = 0;
-        std::uint8_t len = 0;              // number of value bytes (0..kMaxBytes)
-        std::uint8_t data[kMaxBytes] = {}; // value bytes, `len` bytes used
+        uint8_t object_id = 0;
+        uint8_t len = 0;              // number of value bytes (0..kMaxBytes)
+        uint8_t data[kMaxBytes] = {}; // value bytes, `len` bytes used
     };
 
     // BTHome device-information byte (first byte after UUID in service data).
     struct DeviceInfo
     {
-        static constexpr std::uint8_t kEncryptedBit = 0x01u;    // bit 0
-        static constexpr std::uint8_t kTriggerBasedBit = 0x04u; // bit 2
+        static constexpr uint8_t kEncryptedBit = 0x01u;    // bit 0
+        static constexpr uint8_t kTriggerBasedBit = 0x04u; // bit 2
 
         bool m_encrypted = false;     // bit 0
         bool m_trigger_based = false; // bit 2
-        std::uint8_t m_version = 2;   // bits 5..7
+        uint8_t m_version = 2;   // bits 5..7
 
-        constexpr std::uint8_t toByte() const
+        constexpr uint8_t toByte() const
         {
-            const std::uint8_t version_bits = static_cast<std::uint8_t>((m_version & 0x07u) << 5);
-            const std::uint8_t encrypted_bit = m_encrypted ? kEncryptedBit : 0u;
-            const std::uint8_t trigger_bit = m_trigger_based ? kTriggerBasedBit : 0u;
-            return static_cast<std::uint8_t>(version_bits | encrypted_bit | trigger_bit);
+            const uint8_t version_bits = static_cast<uint8_t>((m_version & 0x07u) << 5);
+            const uint8_t encrypted_bit = m_encrypted ? kEncryptedBit : 0u;
+            const uint8_t trigger_bit = m_trigger_based ? kTriggerBasedBit : 0u;
+            return static_cast<uint8_t>(version_bits | encrypted_bit | trigger_bit);
         }
     };
 
@@ -54,29 +54,29 @@ namespace BTHome
     // [len][0x16][UUID lo][UUID hi][device-info]
     struct ServiceDataHeader
     {
-        static constexpr std::size_t kByteCount = 5;
-        static constexpr std::uint8_t kAdTypeServiceData16 = 0x16;
+        static constexpr size_t kByteCount = 5;
+        static constexpr uint8_t kAdTypeServiceData16 = 0x16;
 
         DeviceInfo m_device_info = {};
 
-        constexpr void writeTo(std::uint8_t *out) const
+        constexpr void writeTo(uint8_t *out) const
         {
             out[0] = 0; // length is finalized after payload is written
             out[1] = kAdTypeServiceData16;
-            out[2] = static_cast<std::uint8_t>(kServiceUuid & 0xFFu);
-            out[3] = static_cast<std::uint8_t>(kServiceUuid >> 8);
+            out[2] = static_cast<uint8_t>(kServiceUuid & 0xFFu);
+            out[3] = static_cast<uint8_t>(kServiceUuid >> 8);
             out[4] = m_device_info.toByte();
         }
     };
 
     // Misc data object IDs.
-    enum class MiscObjectId : std::uint8_t
+    enum class MiscObjectId : uint8_t
     {
         PacketId = 0x00,
     };
 
     // Sensor data object IDs.
-    enum class SensorObjectId : std::uint8_t
+    enum class SensorObjectId : uint8_t
     {
         Battery = 0x01,
         Temperature = 0x02,
@@ -144,7 +144,7 @@ namespace BTHome
     };
 
     // Binary sensor data object IDs.
-    enum class BinaryObjectId : std::uint8_t
+    enum class BinaryObjectId : uint8_t
     {
         GenericBoolean = 0x0F,
         PowerState = 0x10,
@@ -178,7 +178,7 @@ namespace BTHome
     };
 
     // Event object IDs.
-    enum class EventObjectId : std::uint8_t
+    enum class EventObjectId : uint8_t
     {
         ButtonEvent = 0x3A,
         CommandEvent = 0x3B,
@@ -186,7 +186,7 @@ namespace BTHome
     };
 
     // Button event codes (value byte of EventObjectId::ButtonEvent).
-    enum class ButtonEventType : std::uint8_t
+    enum class ButtonEventType : uint8_t
     {
         // Placeholder for "no event": with several buttons, the k-th 0x3A
         // entry in a packet addresses button k, so earlier buttons are padded
@@ -202,7 +202,7 @@ namespace BTHome
     };
 
     // Dimmer event codes (first value byte of EventObjectId::DimmerEvent).
-    enum class DimmerEventType : std::uint8_t
+    enum class DimmerEventType : uint8_t
     {
         None = 0x00,
         RotateLeft = 0x01,
@@ -213,7 +213,7 @@ namespace BTHome
     // [argument count][opcode][arguments...]; StepUp/StepDown carry one
     // step-count argument. The spec advises sending commands only in
     // encrypted advertisements, since anyone can observe or spoof them.
-    enum class CommandEventType : std::uint8_t
+    enum class CommandEventType : uint8_t
     {
         Off = 0x00,
         On = 0x01,
@@ -223,7 +223,7 @@ namespace BTHome
     };
 
     // Device object IDs.
-    enum class DeviceObjectId : std::uint8_t
+    enum class DeviceObjectId : uint8_t
     {
         DeviceTypeId = 0xF0,
         FirmwareVersionU32 = 0xF1,

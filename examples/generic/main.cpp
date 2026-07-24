@@ -4,8 +4,8 @@
 //   .\build\demo_generic.exe
 #include "bthome.h"
 
-#include <cstdint>
-#include <cstdio>
+#include <stdint.h>
+#include <stdio.h>
 
 int main() {
     BTHome::Packet<31> packet;
@@ -19,17 +19,17 @@ int main() {
 
     // packet.data()/size()        -> full AD element ([len][0x16]...)
     // packet.serviceData()/...    -> service-data value ([UUID lo][UUID hi]...)
-    const std::uint8_t* p = packet.data();
-    std::printf("BTHome AD element (%zu bytes): ", packet.size());
-    for (std::size_t i = 0; i < packet.size(); ++i)
+    const uint8_t* p = packet.data();
+    printf("BTHome AD element (%zu bytes): ", packet.size());
+    for (size_t i = 0; i < packet.size(); ++i)
     {
-        std::printf("%02X ", p[i]);
+        printf("%02X ", p[i]);
     }
-    std::printf("\n");
+    printf("\n");
 
     if (!ok)
     {
-        std::printf("WARNING: payload item did not fit\n");
+        printf("WARNING: payload item did not fit\n");
     }
     return 0;
 }

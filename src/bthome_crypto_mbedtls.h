@@ -18,12 +18,12 @@ namespace BTHome
  *
  * @return true on success, false on any mbedtls error.
  */
-inline bool mbedtls_ccm_backend(const std::uint8_t *key,
-                                const std::uint8_t *nonce,
-                                const std::uint8_t *plaintext,
-                                std::size_t length,
-                                std::uint8_t *ciphertext,
-                                std::uint8_t *mic)
+inline bool mbedtls_ccm_backend(const uint8_t *key,
+                                const uint8_t *nonce,
+                                const uint8_t *plaintext,
+                                size_t length,
+                                uint8_t *ciphertext,
+                                uint8_t *mic)
 {
     mbedtls_ccm_context ccm;
     mbedtls_ccm_init(&ccm);

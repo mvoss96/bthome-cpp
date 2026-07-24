@@ -10,9 +10,9 @@
 #include "bthome.h"
 #include "bthome_crypto_mbedtls.h"
 
-#include <cstddef>
-#include <cstdint>
-#include <cstdio>
+#include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
 
 namespace
 {
@@ -22,17 +22,17 @@ namespace
     // advertiser address.
     const char *const kPlainMac = "A4:C1:38:8D:18:B2";
     const char *const kSpecMacStr = "54:48:E6:8F:80:A5";
-    const std::uint8_t kSpecMac[BTHome::Encryptor::kMacBytes] = {0x54, 0x48, 0xE6, 0x8F, 0x80, 0xA5};
+    const uint8_t kSpecMac[BTHome::Encryptor::kMacBytes] = {0x54, 0x48, 0xE6, 0x8F, 0x80, 0xA5};
     const char *const kSpecKeyHex = "231d39c1d7cc1ab1aee224cd096db932";
-    const std::uint8_t kSpecKey[BTHome::Encryptor::kKeyBytes] = {
+    const uint8_t kSpecKey[BTHome::Encryptor::kKeyBytes] = {
         0x23, 0x1D, 0x39, 0xC1, 0xD7, 0xCC, 0x1A, 0xB1,
         0xAE, 0xE2, 0x24, 0xCD, 0x09, 0x6D, 0xB9, 0x32};
 
-    void print_hex(const std::uint8_t *data, std::size_t len)
+    void print_hex(const uint8_t *data, size_t len)
     {
-        for (std::size_t i = 0; i < len; ++i)
+        for (size_t i = 0; i < len; ++i)
         {
-            std::printf("%02X", data[i]);
+            printf("%02X", data[i]);
         }
     }
 
@@ -40,22 +40,22 @@ namespace
     // device-info byte (what bthome-ble expects as service_data value).
     // `expected_json` is the comma-separated content of the "expected" array.
     void emit(const char *name, const char *mac,
-              const std::uint8_t *payload, std::size_t len,
+              const uint8_t *payload, size_t len,
               const char *expected_json,
               const char *bindkey = nullptr, const char *session = nullptr)
     {
-        std::printf("{\"name\":\"%s\",\"mac\":\"%s\",\"payload_hex\":\"", name, mac);
+        printf("{\"name\":\"%s\",\"mac\":\"%s\",\"payload_hex\":\"", name, mac);
         print_hex(payload, len);
-        std::printf("\"");
+        printf("\"");
         if (bindkey != nullptr)
         {
-            std::printf(",\"bindkey\":\"%s\"", bindkey);
+            printf(",\"bindkey\":\"%s\"", bindkey);
         }
         if (session != nullptr)
         {
-            std::printf(",\"session\":\"%s\"", session);
+            printf(",\"session\":\"%s\"", session);
         }
-        std::printf(",\"expected\":[%s]}\n", expected_json);
+        printf(",\"expected\":[%s]}\n", expected_json);
     }
 
     void emit_packet(const char *name, const BTHome::Packet<31> &p, const char *expected_json)
@@ -72,7 +72,7 @@ namespace
         BTHome::Packet<31> p;
         p.add(m);
         char expected[160];
-        std::snprintf(expected, sizeof(expected),
+        snprintf(expected, sizeof(expected),
                       "{\"kind\":\"sensor\",\"key\":\"%s\",\"value\":%.10g,\"tolerance\":%.10g}",
                       key, value, tolerance);
         emit_packet(name, p, expected);
@@ -83,7 +83,7 @@ namespace
         BTHome::Packet<31> p;
         p.add(m);
         char expected[64];
-        std::snprintf(expected, sizeof(expected),
+        snprintf(expected, sizeof(expected),
                       "{\"kind\":\"binary\",\"value\":%s}", value ? "true" : "false");
         emit_packet(name, p, expected);
     }
@@ -94,15 +94,15 @@ namespace
                         BTHome::Encryptor &encryptor, const char *expected_json,
                         const char *session = nullptr)
     {
-        std::uint8_t adv[31] = {};
+        uint8_t adv[31] = {};
         const int n = BTHome::build_encrypted_advertising(p, encryptor, adv, sizeof(adv));
         if (n < 8)
         {
-            std::fprintf(stderr, "encrypted build failed for %s\n", name);
+            fprintf(stderr, "encrypted build failed for %s\n", name);
             return;
         }
         // adv = [02 01 06][len][0x16][D2][FC][device-info]... -> payload at 7.
-        emit(name, kSpecMacStr, adv + 7, static_cast<std::size_t>(n) - 7,
+        emit(name, kSpecMacStr, adv + 7, static_cast<size_t>(n) - 7,
              expected_json, kSpecKeyHex, session);
     }
 
@@ -210,9 +210,9 @@ int main()
     for (const BinaryEntry &b : binaries)
     {
         char name[64];
-        std::snprintf(name, sizeof(name), "%s_true", b.name);
+        snprintf(name, sizeof(name), "%s_true", b.name);
         binary_case(name, b.factory(true), true);
-        std::snprintf(name, sizeof(name), "%s_false", b.name);
+        snprintf(name, sizeof(name), "%s_false", b.name);
         binary_case(name, b.factory(false), false);
     }
 
@@ -237,8 +237,8 @@ int main()
         p.add(BTHome::button_event(b.code));
         char name[64];
         char expected[128];
-        std::snprintf(name, sizeof(name), "button_%s", b.event_type);
-        std::snprintf(expected, sizeof(expected),
+        snprintf(name, sizeof(name), "button_%s", b.event_type);
+        snprintf(expected, sizeof(expected),
                       "{\"kind\":\"event\",\"key\":\"button\",\"value\":\"%s\"}", b.event_type);
         emit_packet(name, p, expected);
     }
@@ -313,7 +313,7 @@ int main()
                     "{\"kind\":\"text\",\"value\":\"Hello W\\u00f6rld\"}");
     }
     {
-        const std::uint8_t bytes[] = {0x01, 0x02, 0x03, 0x04};
+        const uint8_t bytes[] = {0x01, 0x02, 0x03, 0x04};
         BTHome::Packet<31> p;
         p.add(BTHome::raw(bytes, sizeof(bytes)));
         emit_packet("raw_bytes", p, "{\"kind\":\"raw\",\"value\":\"01020304\"}");

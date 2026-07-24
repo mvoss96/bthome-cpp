@@ -4,7 +4,7 @@
 // structure and hand the raw buffer to esp_ble_gap_config_adv_data_raw().
 #include "bthome.h"
 
-#include <cstring>
+#include <string.h>
 
 #include "esp_bt.h"
 #include "esp_bt_main.h"
@@ -45,7 +45,7 @@ extern "C" void app_main(void) {
     raw_adv[n++] = 0x02;
     raw_adv[n++] = 0x01;
     raw_adv[n++] = 0x06;
-    std::memcpy(&raw_adv[n], packet.data(), packet.size());
+    memcpy(&raw_adv[n], packet.data(), packet.size());
     n += packet.size();
 
     esp_ble_gap_config_adv_data_raw(raw_adv, n);
