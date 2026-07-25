@@ -315,6 +315,42 @@ static void test_decrypt_payload_entry_point()
                 count == 2 && dec.status() == BTHome::DecodeStatus::End);
 }
 
+static void test_decrypt_psa_backend()
+{
+    // Tests: The identical round trip through the PSA Crypto adapter.
+    // Expects: Same plaintext as the mbedtls adapter, and a rejected MIC on a
+    //          tampered packet - the two backends must be interchangeable in
+    //          both directions, not just for encryption.
+    uint8_t sd[32] = {};
+    const size_t sd_len = buildEncryptedServiceData(kSpecCounter, sd, sizeof(sd));
+
+    BTHome::Decryptor decryptor(&BTHome::psa_ccm_decrypt_backend);
+    decryptor.setKey(kSpecKey);
+    decryptor.setMac(kSpecMac);
+
+    uint8_t plain[32] = {};
+    size_t plain_len = 0;
+    expect_true("psa decrypt: status Ok",
+                decryptor.decryptServiceData(sd, sd_len, plain, sizeof(plain), plain_len) ==
+                    BTHome::DecryptStatus::Ok);
+
+    const uint8_t want_plain[] = {0xD2, 0xFC, 0x40, 0x02, 0xCA, 0x09, 0x03, 0xBF, 0x13};
+    expect_bytes("psa decrypt: plaintext matches mbedtls", plain, plain_len,
+                 want_plain, sizeof(want_plain));
+
+    // The rejoin of ciphertext and MIC is PSA-specific; a tampered byte has to
+    // fail there too, otherwise the adapter would be accepting anything.
+    uint8_t tampered[32] = {};
+    memcpy(tampered, sd, sd_len);
+    tampered[sd_len - 1] ^= 0x01; // last MIC byte
+    BTHome::Decryptor fresh(&BTHome::psa_ccm_decrypt_backend);
+    fresh.setKey(kSpecKey);
+    fresh.setMac(kSpecMac);
+    expect_true("psa decrypt: tampered MIC rejected",
+                fresh.decryptServiceData(tampered, sd_len, plain, sizeof(plain), plain_len) ==
+                    BTHome::DecryptStatus::AuthFailed);
+}
+
 static void test_decrypt_rejections()
 {
     uint8_t sd[32] = {};
@@ -414,6 +450,7 @@ int main()
     test_error_paths();
     test_decrypt_round_trip();
     test_decrypt_payload_entry_point();
+    test_decrypt_psa_backend();
     test_decrypt_rejections();
 
     return test_summary();
