@@ -35,4 +35,30 @@ inline bool mbedtls_ccm_backend(const uint8_t *key,
     return ok;
 }
 
+/**
+ * @brief CcmDecryptFn adapter backed by mbedtls AES-128-CCM.
+ *
+ * Usage: BTHome::Decryptor decryptor(&BTHome::mbedtls_ccm_decrypt_backend);
+ *
+ * @return true only when the MIC verified; mbedtls_ccm_auth_decrypt() reports
+ *         a mismatch as an error, which is exactly the check the Decryptor
+ *         relies on to reject wrong-key and tampered packets.
+ */
+inline bool mbedtls_ccm_decrypt_backend(const uint8_t *key,
+                                        const uint8_t *nonce,
+                                        const uint8_t *ciphertext,
+                                        size_t length,
+                                        const uint8_t *mic,
+                                        uint8_t *plaintext)
+{
+    mbedtls_ccm_context ccm;
+    mbedtls_ccm_init(&ccm);
+    const bool ok =
+        mbedtls_ccm_setkey(&ccm, MBEDTLS_CIPHER_ID_AES, key, 8 * Encryptor::kKeyBytes) == 0 &&
+        mbedtls_ccm_auth_decrypt(&ccm, length, nonce, Encryptor::kNonceBytes, nullptr, 0,
+                                 ciphertext, plaintext, mic, Encryptor::kMicBytes) == 0;
+    mbedtls_ccm_free(&ccm);
+    return ok;
+}
+
 } // namespace BTHome

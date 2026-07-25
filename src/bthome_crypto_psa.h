@@ -76,4 +76,58 @@ inline bool psa_ccm_backend(const uint8_t *key,
     return true;
 }
 
+/**
+ * @brief CcmDecryptFn adapter backed by the PSA Crypto API.
+ *
+ * Usage: BTHome::Decryptor decryptor(&BTHome::psa_ccm_decrypt_backend);
+ *
+ * @return true only when the tag verified - psa_aead_decrypt() fails on a
+ *         mismatch, which is the check the Decryptor relies on.
+ */
+inline bool psa_ccm_decrypt_backend(const uint8_t *key,
+                                    const uint8_t *nonce,
+                                    const uint8_t *ciphertext,
+                                    size_t length,
+                                    const uint8_t *mic,
+                                    uint8_t *plaintext)
+{
+    // PSA expects ciphertext and tag contiguously; BTHome carries the counter
+    // between them, so rejoin them in a stack buffer first.
+    uint8_t buffer[64];
+    if (length + Encryptor::kMicBytes > sizeof(buffer))
+    {
+        return false;
+    }
+    if (psa_crypto_init() != PSA_SUCCESS)
+    {
+        return false;
+    }
+    memcpy(buffer, ciphertext, length);
+    memcpy(buffer + length, mic, Encryptor::kMicBytes);
+
+    const psa_algorithm_t alg =
+        PSA_ALG_AEAD_WITH_SHORTENED_TAG(PSA_ALG_CCM, Encryptor::kMicBytes);
+
+    psa_key_attributes_t attributes = PSA_KEY_ATTRIBUTES_INIT;
+    psa_set_key_usage_flags(&attributes, PSA_KEY_USAGE_DECRYPT);
+    psa_set_key_algorithm(&attributes, alg);
+    psa_set_key_type(&attributes, PSA_KEY_TYPE_AES);
+    psa_set_key_bits(&attributes, 8 * Encryptor::kKeyBytes);
+
+    psa_key_id_t key_id;
+    if (psa_import_key(&attributes, key, Encryptor::kKeyBytes, &key_id) != PSA_SUCCESS)
+    {
+        return false;
+    }
+
+    size_t out_len = 0;
+    const bool ok =
+        psa_aead_decrypt(key_id, alg, nonce, Encryptor::kNonceBytes, nullptr, 0,
+                         buffer, length + Encryptor::kMicBytes,
+                         plaintext, length, &out_len) == PSA_SUCCESS &&
+        out_len == length;
+    psa_destroy_key(key_id);
+    return ok;
+}
+
 } // namespace BTHome

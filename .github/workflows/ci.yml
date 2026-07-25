@@ -27,6 +27,7 @@ jobs:
           ${{ matrix.compiler }} -std=c++17 -fno-exceptions -fno-rtti -Wall -Wextra -Werror -I src examples/generic/main.cpp -o build/demo_generic
           ${{ matrix.compiler }} -std=c++17 -fno-exceptions -fno-rtti -Wall -Wextra -Werror -I src examples/generic_decode/main.cpp -o build/demo_decode
           ${{ matrix.compiler }} -std=c++17 -fno-exceptions -fno-rtti -Wall -Wextra -Werror -I src examples/generic_encrypted/main.cpp -lmbedcrypto -o build/demo_encrypted
+          ${{ matrix.compiler }} -std=c++17 -fno-exceptions -fno-rtti -Wall -Wextra -Werror -I src examples/generic_decrypt/main.cpp -lmbedcrypto -o build/demo_decrypt
       - name: Run tests
         run: |
           ./build/test_bthome
@@ -35,6 +36,7 @@ jobs:
           ./build/test_encryption
           ./build/demo_decode
           ./build/demo_encrypted
+          ./build/demo_decrypt
 
   manifests:
     # library.properties (Arduino) and library.json (PlatformIO) both carry a
