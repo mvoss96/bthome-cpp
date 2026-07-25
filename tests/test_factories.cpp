@@ -145,6 +145,7 @@ int main()
         {"gas_detected(false)", BTHome::gas_detected(false), 0x1C, 1, {0x00}},
         {"heat(true)", BTHome::heat(true), 0x1D, 1, {0x01}},
         {"light(false)", BTHome::light(false), 0x1E, 1, {0x00}},
+        // Spec: 0x1F is "0 = Locked, 1 = Unlocked", so 0x01 here means open.
         {"lock(true)", BTHome::lock(true), 0x1F, 1, {0x01}},
         {"moisture_detected(false)", BTHome::moisture_detected(false), 0x20, 1, {0x00}},
         {"motion(true)", BTHome::motion(true), 0x21, 1, {0x01}},
