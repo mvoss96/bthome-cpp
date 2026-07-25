@@ -26,24 +26,21 @@ static bool decodeAdElement(const char* label, const uint8_t* ad, size_t len) {
 
     BTHome::Decoded obj;
     while (dec.next(obj)) {
-        switch (obj.kind) {
-            case BTHome::ObjectKind::PacketId:
-                // Not every object is a measurement: the packet id is an
-                // exact integer and lives in raw, not in value.
-                printf("  0x%02X  packet id %u\n", obj.object_id, static_cast<unsigned>(obj.raw));
-                break;
-            case BTHome::ObjectKind::Binary:
-                printf("  0x%02X  %s\n", obj.object_id, obj.on ? "on" : "off");
-                break;
-            case BTHome::ObjectKind::ButtonEvent:
-                printf("  0x%02X  button event %u\n", obj.object_id, obj.event);
-                break;
-            case BTHome::ObjectKind::DimmerEvent:
-                printf("  0x%02X  dimmer event %u, %u steps\n", obj.object_id, obj.event, obj.steps);
-                break;
-            default:
-                printf("  0x%02X  %.2f\n", obj.object_id, static_cast<double>(obj.value));
-                break;
+        // is() compares against the object id enums - no hex literals, no
+        // casts. Sensors carry value; events and exact integers carry raw,
+        // which event() and steps() read back.
+        if (obj.is(BTHome::MiscObjectId::PacketId)) {
+            printf("  packet id    %u\n", static_cast<unsigned>(obj.raw));
+        } else if (obj.is(BTHome::SensorObjectId::Battery)) {
+            printf("  battery      %.0f %%\n", static_cast<double>(obj.value));
+        } else if (obj.is(BTHome::SensorObjectId::Temperature)) {
+            printf("  temperature  %.2f C\n", static_cast<double>(obj.value));
+        } else if (obj.is(BTHome::SensorObjectId::Humidity)) {
+            printf("  humidity     %.1f %%\n", static_cast<double>(obj.value));
+        } else if (obj.is(BTHome::EventObjectId::ButtonEvent)) {
+            printf("  button       event %u\n", obj.event());
+        } else if (obj.is(BTHome::EventObjectId::DimmerEvent)) {
+            printf("  dimmer       event %u, %u steps\n", obj.event(), obj.steps());
         }
     }
 

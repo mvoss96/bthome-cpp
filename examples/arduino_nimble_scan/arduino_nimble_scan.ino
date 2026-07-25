@@ -25,9 +25,17 @@ class ScanCallbacks : public NimBLEScanCallbacks {
 
     Serial.printf("%s rssi %d\n", dev->getAddress().toString().c_str(), dev->getRSSI());
 
+    // Pick out what arduino_nimble.ino sends. is() compares against the
+    // object id enums, so no hex literals and no casts.
     BTHome::Decoded obj;
     while (dec.next(obj)) {
-      Serial.printf("  0x%02X = %.2f\n", obj.object_id, obj.value);
+      if (obj.is(BTHome::SensorObjectId::Temperature)) {
+        Serial.printf("  temperature %.2f C\n", obj.value);
+      } else if (obj.is(BTHome::SensorObjectId::Humidity)) {
+        Serial.printf("  humidity    %.1f %%\n", obj.value);
+      } else if (obj.is(BTHome::SensorObjectId::Battery)) {
+        Serial.printf("  battery     %.0f %%\n", obj.value);
+      }
     }
 
     // End is the only clean outcome; status() says which of the others it was.

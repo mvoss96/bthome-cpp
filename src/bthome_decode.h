@@ -58,14 +58,12 @@ namespace BTHome
     /**
      * @brief One decoded object, as a view into the caller's buffer.
      *
-     * Which fields carry meaning follows from @c kind:
-     *  - Sensor          @c value (physical value) and @c raw (wire bits)
-     *  - Binary          @c on, plus @c value as 1.0/0.0 for convenience
-     *  - ButtonEvent     @c event
-     *  - DimmerEvent     @c event and @c steps
-     *  - CommandEvent    @c event (opcode) and @c steps (first argument)
-     *  - Text / Raw      @c bytes and @c length, pointing into the buffer
-     *  - everything else @c raw
+     * Three fields carry the payload, and which one applies follows from
+     * @c kind:
+     *  - @c value   the physical value, for Sensor objects
+     *  - @c raw     the wire bits, for every fixed-width object and for
+     *               events; on(), event() and steps() read it for you
+     *  - @c bytes / @c length  for Text and Raw, pointing into the buffer
      *
      * @note For the exact 32-bit integer objects - CountU32 (0x3E), CountS32
      *       (0x5B) and Timestamp (0x50) - a float cannot represent every
@@ -76,13 +74,28 @@ namespace BTHome
     {
         uint8_t object_id = 0;
         ObjectKind kind = ObjectKind::Unknown;
-        float value = 0.0f;          // Sensor: physical value; Binary: 1.0/0.0; else 0
-        uint32_t raw = 0;            // fixed-width objects: unsigned little-endian bits
-        bool on = false;             // Binary
-        uint8_t event = 0;           // Button/Dimmer/Command code
-        uint8_t steps = 0;           // Dimmer step count / first Command argument
-        const uint8_t *bytes = nullptr; // Text/Raw payload view (nullptr otherwise)
-        uint8_t length = 0;          // Text/Raw payload length
+        float value = 0.0f;             // Sensor only
+        uint32_t raw = 0;               // fixed-width objects and events
+        const uint8_t *bytes = nullptr; // Text/Raw payload view
+        uint8_t length = 0;             // Text/Raw payload length
+
+        /** @brief Binary sensor state. */
+        bool on() const { return raw != 0; }
+
+        /** @brief Button/dimmer event code, or a command event's opcode. */
+        uint8_t event() const { return static_cast<uint8_t>(raw & 0xFFu); }
+
+        /** @brief Dimmer step count, or a command event's first argument. */
+        uint8_t steps() const { return static_cast<uint8_t>((raw >> 8) & 0xFFu); }
+
+        /**
+         * @brief Compares against any of the BTHome object id enums.
+         * @tparam ObjectIdEnum One of SensorObjectId, BinaryObjectId, ...
+         * @param id Object id to test for.
+         * @return true when this object carries that id.
+         */
+        template <typename ObjectIdEnum>
+        bool is(ObjectIdEnum id) const { return object_id == detail::oid(id); }
     };
 
     class Decoder
@@ -172,31 +185,18 @@ namespace BTHome
                 return fail(DecodeStatus::Truncated);
             }
 
+            // The wire bits go into raw for every fixed-width object; on(),
+            // event() and steps() read them back. Only sensors additionally
+            // need scaling into a physical value.
             uint32_t raw = 0;
             for (uint8_t i = 0; i < layout.width; ++i)
             {
                 raw |= static_cast<uint32_t>(m_data[m_pos + 1 + i]) << (8 * i);
             }
             out.raw = raw;
-
-            switch (layout.kind)
+            if (layout.kind == ObjectKind::Sensor)
             {
-            case ObjectKind::Binary:
-                out.on = (raw != 0);
-                out.value = out.on ? 1.0f : 0.0f;
-                break;
-            case ObjectKind::ButtonEvent:
-                out.event = static_cast<uint8_t>(raw);
-                break;
-            case ObjectKind::DimmerEvent:
-                out.event = static_cast<uint8_t>(raw & 0xFFu);
-                out.steps = static_cast<uint8_t>(raw >> 8);
-                break;
-            case ObjectKind::Sensor:
                 out.value = physical(raw, layout);
-                break;
-            default: // PacketId, DeviceTypeId, FirmwareVersion - raw carries it
-                break;
             }
 
             m_pos += 1u + layout.width;
@@ -248,8 +248,12 @@ namespace BTHome
                     return fail(DecodeStatus::Truncated);
                 }
                 const uint8_t argc = m_data[m_pos + 1];
-                out.event = m_data[m_pos + 2];
-                out.steps = (argc >= 1) ? m_data[m_pos + 3] : 0;
+                const uint8_t opcode = m_data[m_pos + 2];
+                const uint8_t first_arg = (argc >= 1) ? m_data[m_pos + 3] : 0;
+                // Packed the way the dimmer event's two wire bytes already
+                // land, so event() and steps() work here too.
+                out.raw = static_cast<uint32_t>(opcode) |
+                          (static_cast<uint32_t>(first_arg) << 8);
                 m_pos += 3u + argc;
                 return true;
             }

@@ -120,20 +120,20 @@ static void test_binary_and_events()
 
     // Order: 0x00 pid, 0x21 motion, 0x3A, 0x3A, 0x3B command, 0x3C dimmer
     expect_true("events: packet id", d[0].kind == BTHome::ObjectKind::PacketId && d[0].raw == 7);
-    expect_true("events: motion", d[1].kind == BTHome::ObjectKind::Binary && d[1].on);
+    expect_true("events: motion", d[1].kind == BTHome::ObjectKind::Binary && d[1].on());
     expect_true("events: button 1 none",
                 d[2].kind == BTHome::ObjectKind::ButtonEvent &&
-                    d[2].event == static_cast<uint8_t>(BTHome::ButtonEventType::None));
+                    d[2].event() == static_cast<uint8_t>(BTHome::ButtonEventType::None));
     expect_true("events: button 2 double",
-                d[3].event == static_cast<uint8_t>(BTHome::ButtonEventType::DoublePress));
+                d[3].event() == static_cast<uint8_t>(BTHome::ButtonEventType::DoublePress));
     expect_true("events: command step up 5",
                 d[4].kind == BTHome::ObjectKind::CommandEvent &&
-                    d[4].event == static_cast<uint8_t>(BTHome::CommandEventType::StepUp) &&
-                    d[4].steps == 5);
+                    d[4].event() == static_cast<uint8_t>(BTHome::CommandEventType::StepUp) &&
+                    d[4].steps() == 5);
     expect_true("events: dimmer left 3",
                 d[5].kind == BTHome::ObjectKind::DimmerEvent &&
-                    d[5].event == static_cast<uint8_t>(BTHome::DimmerEventType::RotateLeft) &&
-                    d[5].steps == 3);
+                    d[5].event() == static_cast<uint8_t>(BTHome::DimmerEventType::RotateLeft) &&
+                    d[5].steps() == 3);
 }
 
 static void test_device_objects_and_text()
@@ -227,7 +227,7 @@ static void test_wide_and_remaining_kinds()
     expect_true("wide: uint24 energy", ener != nullptr && near(ener->value, 12.345f, 0.001f));
     expect_true("wide: dimmer none carries a zero steps byte",
                 dim != nullptr && dim->kind == BTHome::ObjectKind::DimmerEvent &&
-                    dim->event == static_cast<uint8_t>(BTHome::DimmerEventType::None) && dim->steps == 0);
+                    dim->event() == static_cast<uint8_t>(BTHome::DimmerEventType::None) && dim->steps() == 0);
     expect_true("wide: raw kind and bytes",
                 rawo != nullptr && rawo->kind == BTHome::ObjectKind::Raw && rawo->length == 3 &&
                     rawo->bytes != nullptr && memcmp(rawo->bytes, payload, 3) == 0);

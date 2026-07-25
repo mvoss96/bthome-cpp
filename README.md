@@ -122,15 +122,10 @@ BTHome::Decoder dec(service_data, len); // [uuid lo][uuid hi][info][objects...]
 BTHome::Decoded obj;
 while (dec.next(obj))
 {
-    switch (obj.kind)
-    {
-    case BTHome::ObjectKind::Sensor:      /* obj.value (scaled), obj.raw */ break;
-    case BTHome::ObjectKind::Binary:      /* obj.on */ break;
-    case BTHome::ObjectKind::ButtonEvent: /* obj.event */ break;
-    case BTHome::ObjectKind::DimmerEvent: /* obj.event, obj.steps */ break;
-    case BTHome::ObjectKind::Text:        /* obj.bytes, obj.length */ break;
-    default: break;
-    }
+    // is() compares against the object id enums - no hex literals, no casts.
+    if (obj.is(BTHome::SensorObjectId::Temperature)) { publish(obj.value); }
+    else if (obj.is(BTHome::BinaryObjectId::Motion)) { publish(obj.on()); }
+    else if (obj.is(BTHome::EventObjectId::DimmerEvent)) { publish(obj.event(), obj.steps()); }
 }
 
 if (dec.status() != BTHome::DecodeStatus::End)
