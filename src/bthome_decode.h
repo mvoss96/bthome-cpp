@@ -19,13 +19,30 @@
 //
 // Usage:
 //   BTHome::Decoder dec(service_data, len); // [uuid lo][uuid hi][info][objects...]
-//   if (!dec.valid() || dec.encrypted()) { ... }
 //   BTHome::Decoded obj;
 //   while (dec.next(obj)) { switch (obj.kind) { ... } }
-//   if (!dec.ok()) { /* malformed or unknown object id: rest was skipped */ }
+//   if (dec.status() != BTHome::DecodeStatus::End) { /* status says why */ }
 
 namespace BTHome
 {
+
+    /**
+     * @brief Why iteration is over - the decoder's single result.
+     *
+     * A receiver wants these apart: an unknown id means this library version
+     * is older than the sender, a truncated buffer means the transport lost
+     * bytes, and an encrypted payload means a key is missing. They call for
+     * three different fixes.
+     */
+    enum class DecodeStatus : uint8_t
+    {
+        Ok,        // iteration in progress, nothing wrong so far
+        End,       // every object was read - the only clean outcome
+        BadHeader, // service UUID does not match, or fewer than 3 bytes
+        Encrypted, // device-info encrypted bit is set; decrypt first
+        Truncated, // an object announces more bytes than the buffer holds
+        UnknownId, // object id unknown here; out.object_id names it
+    };
 
     /**
      * @brief One decoded object, as a view into the caller's buffer.
@@ -63,31 +80,55 @@ namespace BTHome
         // service_data: [uuid lo][uuid hi][device info][objects...] — exactly
         // what Packet::serviceData() emits and BLE service data carries.
         Decoder(const uint8_t *service_data, size_t len)
-            : m_data(service_data), m_len(len), m_pos(3), m_info(0), m_valid(false), m_ok(false)
+            : m_data(service_data), m_len(len), m_pos(3), m_info(0),
+              m_status(DecodeStatus::BadHeader)
         {
-            m_valid = (service_data != nullptr) && (len >= 3) &&
-                      (service_data[0] == static_cast<uint8_t>(kServiceUuid & 0xFFu)) &&
-                      (service_data[1] == static_cast<uint8_t>(kServiceUuid >> 8));
-            if (m_valid)
+            const bool header_ok =
+                (service_data != nullptr) && (len >= 3) &&
+                (service_data[0] == static_cast<uint8_t>(kServiceUuid & 0xFFu)) &&
+                (service_data[1] == static_cast<uint8_t>(kServiceUuid >> 8));
+            if (!header_ok)
             {
-                m_info = service_data[2];
+                return; // stays BadHeader
             }
-            m_ok = m_valid;
+
+            m_info = service_data[2];
+            // Encrypted payloads carry ciphertext objects, so refuse to
+            // iterate them right away. Decrypt first, then feed the plaintext
+            // to a new Decoder (see bthome_encryption.h for the layout).
+            m_status = encrypted() ? DecodeStatus::Encrypted : DecodeStatus::Ok;
         }
 
-        bool valid() const { return m_valid; }
-        // Encrypted payloads carry ciphertext objects: next() refuses to
-        // iterate them. Decrypt first (see bthome_encryption.h layout).
-        bool encrypted() const { return m_valid && (m_info & DeviceInfo::kEncryptedBit) != 0; }
-        bool triggerBased() const { return m_valid && (m_info & DeviceInfo::kTriggerBasedBit) != 0; }
+        // Header information, readable even when the payload cannot be
+        // iterated - an encrypted packet still tells you its version.
+        // m_info stays 0 for a bad header, so these read false / 0 there.
+        bool encrypted() const { return (m_info & DeviceInfo::kEncryptedBit) != 0; }
+        bool triggerBased() const { return (m_info & DeviceInfo::kTriggerBasedBit) != 0; }
         uint8_t version() const { return static_cast<uint8_t>(m_info >> 5); }
 
-        // False once all objects were consumed OR parsing had to stop.
-        // ok() distinguishes: true = clean end, false = malformed/unknown id.
+        /**
+         * @brief Why iteration ended. Sticky once it leaves Ok.
+         * @return DecodeStatus::End after a complete pass, otherwise the
+         *         reason the decoder stopped.
+         */
+        DecodeStatus status() const { return m_status; }
+
+        /**
+         * @brief Reads the next object.
+         * @param out Filled when the call returns true. On a false return it
+         *        is unspecified, except after DecodeStatus::UnknownId, where
+         *        out.object_id names the id that stopped the parse.
+         * @return true while objects remain; false once status() leaves Ok.
+         */
         bool next(Decoded &out)
         {
-            if (!m_ok || encrypted() || m_pos >= m_len)
+            if (m_status != DecodeStatus::Ok)
             {
+                return false; // terminal status is sticky
+            }
+            if (m_pos >= m_len)
+            {
+                m_status = DecodeStatus::End;
                 return false;
             }
 
@@ -102,7 +143,7 @@ namespace BTHome
             // of the buffer cannot be trusted - stop rather than guess.
             if (layout.kind == ObjectKind::Unknown)
             {
-                return fail();
+                return fail(DecodeStatus::UnknownId);
             }
 
             if (layout.variable)
@@ -112,7 +153,7 @@ namespace BTHome
 
             if (m_pos + 1u + layout.width > m_len)
             {
-                return fail();
+                return fail(DecodeStatus::Truncated);
             }
 
             uint32_t raw = 0;
@@ -146,12 +187,10 @@ namespace BTHome
             return true;
         }
 
-        bool ok() const { return m_ok; }
-
     private:
-        bool fail()
+        bool fail(DecodeStatus reason)
         {
-            m_ok = false;
+            m_status = reason;
             return false;
         }
 
@@ -165,7 +204,7 @@ namespace BTHome
             {
                 if (m_pos + 3 > m_len || m_pos + 3 + m_data[m_pos + 1] > m_len)
                 {
-                    return fail();
+                    return fail(DecodeStatus::Truncated);
                 }
                 const uint8_t argc = m_data[m_pos + 1];
                 out.event = m_data[m_pos + 2];
@@ -176,7 +215,7 @@ namespace BTHome
 
             if (m_pos + 2 > m_len || m_pos + 2 + m_data[m_pos + 1] > m_len)
             {
-                return fail();
+                return fail(DecodeStatus::Truncated);
             }
             out.length = m_data[m_pos + 1];
             out.bytes = m_data + m_pos + 2;
@@ -208,8 +247,7 @@ namespace BTHome
         size_t m_len;
         size_t m_pos;
         uint8_t m_info;
-        bool m_valid;
-        bool m_ok;
+        DecodeStatus m_status;
     };
 
 } // namespace BTHome

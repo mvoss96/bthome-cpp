@@ -36,17 +36,27 @@ static void test_header()
     p.add(BTHome::packet_id(42));
 
     BTHome::Decoder dec(p.serviceData(), p.serviceDataSize());
-    expect_true("header: valid", dec.valid());
+    expect_true("header: starts ready", dec.status() == BTHome::DecodeStatus::Ok);
     expect_true("header: version 2", dec.version() == 2);
     expect_true("header: trigger-based", dec.triggerBased());
     expect_true("header: not encrypted", !dec.encrypted());
 
     const uint8_t bogus[3] = {0xAA, 0xBB, 0x40};
     BTHome::Decoder bad(bogus, sizeof(bogus));
-    expect_true("header: wrong uuid rejected", !bad.valid());
+    expect_true("header: wrong uuid rejected",
+                bad.status() == BTHome::DecodeStatus::BadHeader);
 
     BTHome::Decoder tooShort(p.serviceData(), 2);
-    expect_true("header: too short rejected", !tooShort.valid());
+    expect_true("header: too short rejected",
+                tooShort.status() == BTHome::DecodeStatus::BadHeader);
+
+    // A valid but empty payload is a clean pass, not an error.
+    const uint8_t empty[3] = {0xD2, 0xFC, 0x40};
+    BTHome::Decoder none(empty, sizeof(empty));
+    BTHome::Decoded discard;
+    expect_true("header: empty payload yields nothing", !none.next(discard));
+    expect_true("header: empty payload ends cleanly",
+                none.status() == BTHome::DecodeStatus::End);
 }
 
 static void test_scaled_sensors()
@@ -61,7 +71,7 @@ static void test_scaled_sensors()
     BTHome::Decoder dec(nullptr, 0);
     const size_t n = decode_all(p, d, &dec);
     expect_true("sensors: count", n == 4);
-    expect_true("sensors: clean end", dec.ok());
+    expect_true("sensors: clean end", dec.status() == BTHome::DecodeStatus::End);
 
     // Canonical order: battery 0x01, temperature 0x02, humidity 0x03, voltage 0x0C
     expect_true("sensors: battery", d[0].kind == BTHome::ObjectKind::Sensor && near(d[0].value, 87.0f, 0.001f));
@@ -83,7 +93,7 @@ static void test_integer_sensors()
     BTHome::Decoder dec(nullptr, 0);
     const size_t n = decode_all(p, d, &dec);
     expect_true("ints: count", n == 5);
-    expect_true("ints: clean end", dec.ok());
+    expect_true("ints: clean end", dec.status() == BTHome::DecodeStatus::End);
     // Order: 0x09 count, 0x3D u16, 0x3E u32, 0x50 timestamp, 0x5A s16
     expect_true("ints: count u8", d[0].raw == 200);
     expect_true("ints: count u16", d[1].raw == 60000);
@@ -106,7 +116,7 @@ static void test_binary_and_events()
     BTHome::Decoder dec(nullptr, 0);
     const size_t n = decode_all(p, d, &dec);
     expect_true("events: count", n == 6);
-    expect_true("events: clean end", dec.ok());
+    expect_true("events: clean end", dec.status() == BTHome::DecodeStatus::End);
 
     // Order: 0x00 pid, 0x21 motion, 0x3A, 0x3A, 0x3B command, 0x3C dimmer
     expect_true("events: packet id", d[0].kind == BTHome::ObjectKind::PacketId && d[0].raw == 7);
@@ -137,7 +147,7 @@ static void test_device_objects_and_text()
     BTHome::Decoder dec(nullptr, 0);
     const size_t n = decode_all(p, d, &dec);
     expect_true("device: count", n == 3);
-    expect_true("device: clean end", dec.ok());
+    expect_true("device: clean end", dec.status() == BTHome::DecodeStatus::End);
 
     // Order: 0x53 text, 0xF0 type, 0xF2 fw
     expect_true("device: text kind", d[0].kind == BTHome::ObjectKind::Text && d[0].length == 9);
@@ -177,7 +187,7 @@ static void test_signed_widths()
     BTHome::Decoder dec(nullptr, 0);
     const size_t n = decode_all(p, d, &dec);
     expect_true("signed: count", n == 4);
-    expect_true("signed: clean end", dec.ok());
+    expect_true("signed: clean end", dec.status() == BTHome::DecodeStatus::End);
 
     const BTHome::Decoded *s8 = find(d, n, 0x57);
     const BTHome::Decoded *s16 = find(d, n, 0x02);
@@ -205,7 +215,7 @@ static void test_wide_and_remaining_kinds()
     BTHome::Decoder dec(nullptr, 0);
     const size_t n = decode_all(p, d, &dec);
     expect_true("wide: count", n == 5);
-    expect_true("wide: clean end", dec.ok());
+    expect_true("wide: clean end", dec.status() == BTHome::DecodeStatus::End);
 
     const BTHome::Decoded *pres = find(d, n, 0x04);
     const BTHome::Decoded *ener = find(d, n, 0x0A);
@@ -232,25 +242,43 @@ static void test_malformed()
     p.add(BTHome::temperature(21.0f));
 
     // Truncate mid-object: temperature announces 2 value bytes, cut one off.
-    BTHome::Decoder dec(p.serviceData(), p.serviceDataSize() - 1);
-    BTHome::Decoded d;
-    expect_true("malformed: first object still parses", dec.next(d));
-    expect_true("malformed: truncated object stops", !dec.next(d));
-    expect_true("malformed: flagged", !dec.ok());
+    {
+        BTHome::Decoder dec(p.serviceData(), p.serviceDataSize() - 1);
+        BTHome::Decoded d;
+        expect_true("truncated: first object still parses", dec.next(d));
+        expect_true("truncated: stops", !dec.next(d));
+        expect_true("truncated: reported as Truncated",
+                    dec.status() == BTHome::DecodeStatus::Truncated);
+    }
 
-    // Unknown object id: length unknowable, parser must stop and flag.
-    const uint8_t unknown[] = {0xD2, 0xFC, 0x40, /*pid*/ 0x00, 0x05, /*unknown*/ 0xE7, 0x01};
-    BTHome::Decoder dec2(unknown, sizeof(unknown));
-    expect_true("unknown id: pid parses", dec2.next(d) && d.raw == 5);
-    expect_true("unknown id: stops", !dec2.next(d));
-    expect_true("unknown id: flagged", !dec2.ok());
+    // Unknown object id: length unknowable, parser must stop and name the id.
+    {
+        const uint8_t unknown[] = {0xD2, 0xFC, 0x40, /*pid*/ 0x00, 0x05, /*unknown*/ 0xE7, 0x01};
+        BTHome::Decoder dec(unknown, sizeof(unknown));
+        BTHome::Decoded d;
+        expect_true("unknown id: pid parses", dec.next(d) && d.raw == 5);
+        expect_true("unknown id: stops", !dec.next(d));
+        expect_true("unknown id: reported as UnknownId",
+                    dec.status() == BTHome::DecodeStatus::UnknownId);
+        expect_true("unknown id: names the offending id", d.object_id == 0xE7);
 
-    // Encrypted flag: objects are ciphertext, iteration must refuse.
-    const uint8_t enc[] = {0xD2, 0xFC, 0x41, 0x00, 0x05};
-    BTHome::Decoder dec3(enc, sizeof(enc));
-    expect_true("encrypted: valid header", dec3.valid() && dec3.encrypted());
-    expect_true("encrypted: no iteration", !dec3.next(d));
-    expect_true("encrypted: not an error", dec3.ok());
+        // Terminal status is sticky - another call changes nothing.
+        expect_true("unknown id: sticky", !dec.next(d) &&
+                                              dec.status() == BTHome::DecodeStatus::UnknownId);
+    }
+
+    // Encrypted flag: objects are ciphertext, iteration must refuse - and it
+    // must not look like a clean empty packet, which is what ok() used to say.
+    {
+        const uint8_t enc[] = {0xD2, 0xFC, 0x41, 0x00, 0x05};
+        BTHome::Decoder dec(enc, sizeof(enc));
+        BTHome::Decoded d;
+        expect_true("encrypted: flagged", dec.encrypted());
+        expect_true("encrypted: header still readable", dec.version() == 2);
+        expect_true("encrypted: no iteration", !dec.next(d));
+        expect_true("encrypted: distinguishable from a clean end",
+                    dec.status() == BTHome::DecodeStatus::Encrypted);
+    }
 }
 
 int main()

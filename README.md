@@ -118,27 +118,36 @@ width/scaling tables so encode and decode cannot drift apart:
 
 ```cpp
 BTHome::Decoder dec(service_data, len); // [uuid lo][uuid hi][info][objects...]
-if (dec.valid() && !dec.encrypted())
+
+BTHome::Decoded obj;
+while (dec.next(obj))
 {
-    BTHome::Decoded obj;
-    while (dec.next(obj))
+    switch (obj.kind)
     {
-        switch (obj.kind)
-        {
-        case BTHome::DecodedKind::Sensor:      /* obj.value (scaled) */ break;
-        case BTHome::DecodedKind::ButtonEvent: /* obj.event */ break;
-        case BTHome::DecodedKind::DimmerEvent: /* obj.event, obj.steps */ break;
-        case BTHome::DecodedKind::Text:        /* obj.bytes, obj.length */ break;
-        default: break;
-        }
+    case BTHome::ObjectKind::Sensor:      /* obj.value (scaled), obj.raw */ break;
+    case BTHome::ObjectKind::Binary:      /* obj.on */ break;
+    case BTHome::ObjectKind::ButtonEvent: /* obj.event */ break;
+    case BTHome::ObjectKind::DimmerEvent: /* obj.event, obj.steps */ break;
+    case BTHome::ObjectKind::Text:        /* obj.bytes, obj.length */ break;
+    default: break;
     }
-    if (!dec.ok()) { /* malformed or unknown object id: rest was skipped */ }
+}
+
+if (dec.status() != BTHome::DecodeStatus::End)
+{
+    // Ended early. status() says why, and the cases want different reactions:
+    //   BadHeader  not a BTHome service-data buffer
+    //   Encrypted  decrypt first, then decode the plaintext
+    //   Truncated  the transport lost bytes
+    //   UnknownId  sender uses an object this version does not know;
+    //              obj.object_id names it
 }
 ```
 
-Unknown object ids stop the iteration (their length is unknowable) and set
-`ok()` to false. Encrypted payloads are detected (`encrypted()`) but not
-decrypted — decrypt first, then feed the plaintext objects to a Decoder.
+Object widths, scaling and family all come from the same `object_layout()`
+table the factories encode with, so the two directions cannot drift apart.
+An unknown object id ends the pass rather than being skipped - BTHome objects
+carry no length, so where an unknown one ends is not knowable.
 
 ## Encryption (AES-CCM)
 
