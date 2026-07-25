@@ -36,6 +36,47 @@
 
 namespace BTHome
 {
+    namespace detail
+    {
+
+        /**
+         * @brief Widen the low @p width two's-complement bytes of @p bits to
+         *        a full int32_t.
+         *
+         * constexpr on purpose: it lets the static_asserts below evaluate the
+         * arithmetic with the *target's* integer widths, which is the whole
+         * point. The failure mode this guards against exists only where int is
+         * 16 bits - `~0u` is `unsigned int`, so on avr-gcc it can neither reach
+         * bit 31 nor be shifted by 16 or 24 without undefined behaviour, while
+         * the same expression is perfectly fine on every 32-bit host. A host
+         * test can therefore never catch that regression, and neither can a
+         * warning: `width` is a runtime value here, so the compiler cannot
+         * diagnose the shift. Only constant evaluation on the real target can,
+         * and that is what the assertions below do.
+         *
+         * @param bits Raw wire bits, little-endian assembled.
+         * @param width Number of value bytes, 1..4.
+         * @return The value as a signed 32-bit integer.
+         */
+        constexpr int32_t sign_extend(uint32_t bits, uint8_t width)
+        {
+            if (width < 4 && (bits & (uint32_t{1} << (8u * width - 1u))) != 0)
+            {
+                bits |= ~uint32_t{0} << (8u * width);
+            }
+            return static_cast<int32_t>(bits);
+        }
+
+        // Evaluated by every compiler that includes this header, so avr-gcc
+        // checks these on a 16-bit-int target during the ordinary AVR build.
+        static_assert(sign_extend(0xD8u, 1) == -40, "sint8 sign extension");
+        static_assert(sign_extend(0xFB2Eu, 2) == -1234, "sint16 sign extension");
+        static_assert(sign_extend(0xFFFFFFu, 3) == -1, "sint24 sign extension");
+        static_assert(sign_extend(0xFFFFFFFFu, 4) == -1, "sint32 passes through");
+        static_assert(sign_extend(0x7FFFu, 2) == 32767, "positive sint16 unchanged");
+        static_assert(sign_extend(0x00u, 1) == 0, "zero stays zero");
+
+    } // namespace detail
 
     /**
      * @brief Why iteration is over - the decoder's single result.
@@ -274,17 +315,8 @@ namespace BTHome
             {
                 return static_cast<float>(raw) * layout.factor;
             }
-
-            // Sign-extend in uint32_t. Not `~0u`: that is `unsigned int`, which
-            // is 16 bits on avr-gcc, so it can neither reach bit 31 nor be
-            // shifted by 16 or 24 without undefined behaviour.
-            uint32_t bits = raw;
-            if (layout.width < 4 &&
-                (bits & (uint32_t{1} << (8u * layout.width - 1u))) != 0)
-            {
-                bits |= ~uint32_t{0} << (8u * layout.width);
-            }
-            return static_cast<float>(static_cast<int32_t>(bits)) * layout.factor;
+            return static_cast<float>(detail::sign_extend(raw, layout.width)) *
+                   layout.factor;
         }
 
         const uint8_t *m_data;

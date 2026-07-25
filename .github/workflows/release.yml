@@ -20,9 +20,11 @@ jobs:
           TAG=${GITHUB_REF_NAME#v}
           PROPS=$(grep '^version=' library.properties | cut -d= -f2)
           JSON=$(python3 -c "import json; print(json.load(open('library.json'))['version'])")
-          echo "tag=$TAG library.properties=$PROPS library.json=$JSON"
+          IDF=$(grep '^version:' idf_component.yml | cut -d'"' -f2)
+          echo "tag=$TAG library.properties=$PROPS library.json=$JSON idf_component.yml=$IDF"
           test "$TAG" = "$PROPS"
           test "$TAG" = "$JSON"
+          test "$TAG" = "$IDF"
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
