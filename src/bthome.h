@@ -12,6 +12,7 @@
 //    ready-made mbedtls backend (not part of this facade - it needs mbedtls).
 
 #include "bthome_defs.h"
+#include "bthome_objects.h"
 #include "bthome_encoding.h"
 #include "bthome_factories.h"
 #include "bthome_packet.h"

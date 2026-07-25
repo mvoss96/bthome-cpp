@@ -41,6 +41,25 @@ static void check_case(const Case &c)
     printf("\n");
 }
 
+// Ties one factory case to the object_layout() entry for its id.
+static void check_layout(const Case &c)
+{
+    const BTHome::detail::ObjectLayout l = BTHome::detail::object_layout(c.want_id);
+    const bool known = l.kind != BTHome::ObjectKind::Unknown;
+    const bool width_ok = l.variable || (l.width == c.want_len);
+    const bool ok = known && width_ok;
+
+    printf("[%s] layout %s", ok ? "PASS" : "FAIL", c.name);
+    if (!ok)
+    {
+        printf("  id=%02X table width=%u variable=%d kind=%u, factory len=%u",
+               c.want_id, l.width, static_cast<int>(l.variable),
+               static_cast<unsigned>(l.kind), c.want_len);
+        ++g_failures;
+    }
+    printf("\n");
+}
+
 int main()
 {
     // Scalar sensor factories. Values chosen from the BTHome spec examples
@@ -190,6 +209,60 @@ int main()
     if (!counts_ok)
     {
         ++g_failures;
+    }
+
+    // object_layout() is the single source of the payload widths, so every id
+    // a factory emits must have an entry and - unless the object is
+    // variable-length - the table width must match the bytes actually
+    // produced. The want_len values above stay literal on purpose: they are
+    // the independent check against the spec, and this loop ties the table to
+    // them rather than to itself.
+    for (const Case &c : scalar_cases)
+    {
+        check_layout(c);
+    }
+    for (const Case &c : binary_cases)
+    {
+        check_layout(c);
+    }
+    for (const Case &c : event_cases)
+    {
+        check_layout(c);
+    }
+
+    // Text (0x53) and Raw (0x54) are VarMeasurement and so have no Case entry
+    // above - their serialization is covered in test_bthome. Check their table
+    // rows directly, so that no layout row is left unverified.
+    const struct
+    {
+        uint8_t id;
+        BTHome::ObjectKind kind;
+    } var_cases[] = {
+        {0x53, BTHome::ObjectKind::Text},
+        {0x54, BTHome::ObjectKind::Raw},
+    };
+    for (const auto &v : var_cases)
+    {
+        const BTHome::detail::ObjectLayout l = BTHome::detail::object_layout(v.id);
+        const bool ok = l.kind == v.kind && l.variable && l.width == 0 && !l.scaled;
+        printf("[%s] layout variable-length %02X\n", ok ? "PASS" : "FAIL", v.id);
+        if (!ok)
+        {
+            ++g_failures;
+        }
+    }
+
+    // ...and no entry for ids the spec has not assigned.
+    const uint8_t unassigned[] = {0x30, 0x39, 0x66, 0xE7, 0xFF};
+    for (uint8_t id : unassigned)
+    {
+        const BTHome::detail::ObjectLayout l = BTHome::detail::object_layout(id);
+        const bool ok = l.kind == BTHome::ObjectKind::Unknown && l.width == 0;
+        printf("[%s] object_layout(%02X) is unknown\n", ok ? "PASS" : "FAIL", id);
+        if (!ok)
+        {
+            ++g_failures;
+        }
     }
 
     return test_summary();

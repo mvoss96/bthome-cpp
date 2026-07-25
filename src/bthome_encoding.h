@@ -3,112 +3,20 @@
 #include <stdint.h>
 
 #include "bthome_defs.h"
+#include "bthome_objects.h"
 
 namespace BTHome
 {
     namespace detail
     {
 
-        struct SensorEncoding
-        {
-            float factor = 1.0f;
-            uint8_t width = 0;
-            bool is_signed = false;
-        };
-
-        /**
-         * @brief Return encoding rules for a given sensor object ID.
-         * @param id BTHome sensor object ID.
-         * @return Scaling factor, payload width in bytes and signedness.
-         */
-        inline SensorEncoding sensor_encoding(SensorObjectId id)
-        {
-            switch (id)
-            {
-            case SensorObjectId::Temperature:
-            case SensorObjectId::Dewpoint:
-                return {0.01f, 2, true};
-            case SensorObjectId::Humidity:
-            case SensorObjectId::Moisture:
-                return {0.01f, 2, false};
-            case SensorObjectId::Pressure:
-            case SensorObjectId::Illuminance:
-            case SensorObjectId::Power:
-                return {0.01f, 3, false};
-            case SensorObjectId::Energy:
-            case SensorObjectId::Gas:
-            case SensorObjectId::Duration:
-                return {0.001f, 3, false};
-            case SensorObjectId::VolumeFlowRate:
-            case SensorObjectId::Acceleration:
-            case SensorObjectId::Gyroscope:
-                return {0.001f, 2, false};
-            case SensorObjectId::CurrentS16:
-                return {0.001f, 2, true};
-            case SensorObjectId::MassKg:
-            case SensorObjectId::MassLb:
-            case SensorObjectId::Speed:
-                return {0.01f, 2, false};
-            case SensorObjectId::Voltage:
-            case SensorObjectId::Current:
-                return {0.001f, 2, false};
-            case SensorObjectId::Pm2_5:
-            case SensorObjectId::Pm10:
-            case SensorObjectId::Co2:
-            case SensorObjectId::Tvoc:
-            case SensorObjectId::DistanceMm:
-            case SensorObjectId::VolumeMl:
-            case SensorObjectId::Conductivity:
-            case SensorObjectId::RotationalSpeed:
-                return {1.0f, 2, false};
-            case SensorObjectId::Rotation:
-            case SensorObjectId::TemperatureC1:
-                return {0.1f, 2, true};
-            case SensorObjectId::DistanceM:
-            case SensorObjectId::VolumeL:
-            case SensorObjectId::VoltageCenti:
-            case SensorObjectId::Precipitation:
-                return {0.1f, 2, false};
-            case SensorObjectId::UvIndex:
-                return {0.1f, 1, false};
-            case SensorObjectId::HumidityU8:
-            case SensorObjectId::MoistureU8:
-            case SensorObjectId::Channel:
-            case SensorObjectId::LightLevel:
-            case SensorObjectId::SettingsRevision:
-                return {1.0f, 1, false};
-            case SensorObjectId::GasU32:
-            case SensorObjectId::EnergyU32:
-            case SensorObjectId::VolumeU32:
-            case SensorObjectId::Water:
-            case SensorObjectId::VolumeStorage:
-                return {0.001f, 4, false};
-            case SensorObjectId::Direction:
-                return {0.01f, 2, false};
-            case SensorObjectId::TemperatureS8:
-            case SensorObjectId::CountS8:
-                return {1.0f, 1, true};
-            case SensorObjectId::TemperatureS8_035:
-                return {0.35f, 1, true};
-            case SensorObjectId::CountS16:
-                return {1.0f, 2, true};
-            case SensorObjectId::CountS32:
-                return {1.0f, 4, true};
-            case SensorObjectId::PowerS32:
-                return {0.01f, 4, true};
-            case SensorObjectId::SpeedS32:
-            case SensorObjectId::AccelerationS32:
-                return {0.000001f, 4, true};
-            default:
-                return {};
-            }
-        }
-
         /**
          * @brief Encode an unsigned raw integer into a Measurement payload.
          * @param id Object ID byte.
          * @param raw Unsigned raw value.
-         * @param width Number of payload bytes.
+         * @param width Number of payload bytes, at least 1. The only callers
+         *        are u() and s(), which take the width from object_layout()
+         *        and static_assert that it is non-zero.
          * @return Encoded Measurement with little-endian value bytes.
          */
         inline Measurement make_u(uint8_t id, uint64_t raw,
@@ -138,7 +46,7 @@ namespace BTHome
          * @brief Encode a signed raw integer into a Measurement payload.
          * @param id Object ID byte.
          * @param raw Signed raw value.
-         * @param width Number of payload bytes.
+         * @param width Number of payload bytes, at least 1 (see make_u()).
          * @return Encoded Measurement with little-endian value bytes.
          */
         inline Measurement make_s(uint8_t id, int64_t raw,
@@ -168,28 +76,44 @@ namespace BTHome
             return m;
         }
 
+        // The object id is a template parameter, not a function parameter, on
+        // purpose. Inside the function a parameter is not a constant
+        // expression, so object_layout() would be an ordinary call - and at
+        // -Os, which is what Arduino, ESP-IDF and Zephyr build with, gcc
+        // declines to inline a ~90-case switch. As a template argument the
+        // lookup is evaluated by the language: the width, factor and clamp
+        // bounds are baked in, the switch is never emitted for the encode
+        // path, and a wrong id is a compile error instead of a silent
+        // zero-length payload.
+
         /**
-         * @brief Encode a sensor value using rules from sensor_encoding().
-         * @param id BTHome sensor object ID.
+         * @brief Encode a sensor value using the scaling rules of object_layout().
+         * @tparam Id BTHome sensor object ID.
          * @param value Physical value to encode.
          * @return Encoded Measurement.
          */
-        inline Measurement make_sensor(SensorObjectId id, float value)
+        template <auto Id>
+        inline Measurement make_sensor(float value)
         {
-            const SensorEncoding e = sensor_encoding(id);
+            constexpr uint8_t byte_id = oid(Id);
+            constexpr ObjectLayout l = object_layout(byte_id);
+            static_assert(l.scaled, "make_sensor() is for float-scaled objects only");
+
             Measurement m;
-            m.object_id = static_cast<uint8_t>(id);
-            m.len = e.width;
+            m.object_id = byte_id;
+            m.len = l.width;
 
             // Scale to raw integer units and round half away from zero.
-            const float s = value / e.factor;
-            int64_t raw = static_cast<int64_t>(s >= 0.0f ? s + 0.5f : s - 0.5f);
+            const float units = value / l.factor;
+            int64_t raw = static_cast<int64_t>(units >= 0.0f ? units + 0.5f : units - 0.5f);
 
             // Clamp to the representable range for the selected width/sign.
-            if (e.is_signed)
+            // if constexpr: the sign is known from the table, so the branch
+            // that does not apply is never instantiated.
+            if constexpr (l.is_signed)
             {
-                const int64_t max_v = (int64_t{1} << (8 * e.width - 1)) - 1;
-                const int64_t min_v = -(int64_t{1} << (8 * e.width - 1));
+                const int64_t max_v = (int64_t{1} << (8 * l.width - 1)) - 1;
+                const int64_t min_v = -(int64_t{1} << (8 * l.width - 1));
                 if (raw > max_v)
                 {
                     raw = max_v;
@@ -206,8 +130,8 @@ namespace BTHome
                     raw = 0;
                 }
                 const uint64_t umax =
-                    (e.width >= 8) ? ~uint64_t{0}
-                                   : ((uint64_t{1} << (8 * e.width)) - 1);
+                    (l.width >= 8) ? ~uint64_t{0}
+                                   : ((uint64_t{1} << (8 * l.width)) - 1);
                 if (static_cast<uint64_t>(raw) > umax)
                 {
                     raw = static_cast<int64_t>(umax);
@@ -216,7 +140,7 @@ namespace BTHome
 
             // Write payload in little-endian byte order.
             uint64_t u = static_cast<uint64_t>(raw);
-            for (uint8_t i = 0; i < e.width; ++i)
+            for (uint8_t i = 0; i < l.width; ++i)
             {
                 m.data[i] = static_cast<uint8_t>(u & 0xFF);
                 u >>= 8;
@@ -225,97 +149,59 @@ namespace BTHome
             return m;
         }
 
+        // The payload width of an object is stated once, in object_layout().
+        // These wrappers look it up, so a factory only picks the signedness -
+        // which its own parameter type already declares.
+
         /**
-         * @brief Encode a 1-byte unsigned value for an enum-based object ID.
-         * @tparam ObjectId Enum type of the object ID.
-         * @param id Object ID.
+         * @brief Encode an unsigned value; the width comes from object_layout().
+         * @tparam Id Object ID.
          * @param raw Unsigned raw value.
          * @return Encoded Measurement.
          */
-        template <typename ObjectId>
-        inline Measurement u8(ObjectId id, uint64_t raw)
+        template <auto Id>
+        inline Measurement u(uint64_t raw)
         {
-            return make_u(static_cast<uint8_t>(id), raw, 1);
+            constexpr uint8_t byte_id = oid(Id);
+            constexpr ObjectLayout l = object_layout(byte_id);
+            static_assert(l.width != 0 && !l.variable, "object id has no fixed width");
+            static_assert(!l.scaled, "scaled objects must go through make_sensor()");
+            return make_u(byte_id, raw, l.width);
         }
 
         /**
-         * @brief Encode a 2-byte unsigned value for an enum-based object ID.
-         * @tparam ObjectId Enum type of the object ID.
-         * @param id Object ID.
-         * @param raw Unsigned raw value.
-         * @return Encoded Measurement.
-         */
-        template <typename ObjectId>
-        inline Measurement u16(ObjectId id, uint64_t raw)
-        {
-            return make_u(static_cast<uint8_t>(id), raw, 2);
-        }
-
-        /**
-         * @brief Encode a 4-byte unsigned value for an enum-based object ID.
-         * @tparam ObjectId Enum type of the object ID.
-         * @param id Object ID.
-         * @param raw Unsigned raw value.
-         * @return Encoded Measurement.
-         */
-        template <typename ObjectId>
-        inline Measurement u32(ObjectId id, uint64_t raw)
-        {
-            return make_u(static_cast<uint8_t>(id), raw, 4);
-        }
-
-        /**
-         * @brief Encode a 1-byte signed value for an enum-based object ID.
-         * @tparam ObjectId Enum type of the object ID.
-         * @param id Object ID.
+         * @brief Encode a signed value; the width comes from object_layout().
+         * @tparam Id Object ID.
          * @param raw Signed raw value.
          * @return Encoded Measurement.
          */
-        template <typename ObjectId>
-        inline Measurement i8(ObjectId id, int64_t raw)
+        template <auto Id>
+        inline Measurement s(int64_t raw)
         {
-            return make_s(static_cast<uint8_t>(id), raw, 1);
+            constexpr uint8_t byte_id = oid(Id);
+            constexpr ObjectLayout l = object_layout(byte_id);
+            static_assert(l.width != 0 && !l.variable, "object id has no fixed width");
+            static_assert(l.is_signed, "object id is not a signed object");
+            static_assert(!l.scaled, "scaled objects must go through make_sensor()");
+            return make_s(byte_id, raw, l.width);
         }
 
         /**
-         * @brief Encode a 2-byte signed value for an enum-based object ID.
-         * @tparam ObjectId Enum type of the object ID.
-         * @param id Object ID.
-         * @param raw Signed raw value.
-         * @return Encoded Measurement.
-         */
-        template <typename ObjectId>
-        inline Measurement i16(ObjectId id, int64_t raw)
-        {
-            return make_s(static_cast<uint8_t>(id), raw, 2);
-        }
-
-        /**
-         * @brief Encode a 4-byte signed value for an enum-based object ID.
-         * @tparam ObjectId Enum type of the object ID.
-         * @param id Object ID.
-         * @param raw Signed raw value.
-         * @return Encoded Measurement.
-         */
-        template <typename ObjectId>
-        inline Measurement i32(ObjectId id, int64_t raw)
-        {
-            return make_s(static_cast<uint8_t>(id), raw, 4);
-        }
-
-        /**
-         * @brief Encode a boolean value as a 1-byte payload for an enum-based object ID.
-         * @tparam ObjectId Enum type of the object ID.
-         * @param id Object ID.
+         * @brief Encode a boolean value; the width comes from object_layout().
+         * @tparam Id Object ID.
          * @param on Boolean payload value.
          * @return Encoded Measurement.
          */
-        template <typename ObjectId>
-        inline Measurement b(ObjectId id, bool on)
+        template <auto Id>
+        inline Measurement b(bool on)
         {
+            constexpr uint8_t byte_id = oid(Id);
+            constexpr ObjectLayout l = object_layout(byte_id);
+            static_assert(l.kind == ObjectKind::Binary, "b() is for binary sensors only");
+
             Measurement m;
-            m.object_id = static_cast<uint8_t>(id);
-            m.len = 1;
+            m.object_id = byte_id;
+            m.len = l.width;
             m.data[0] = on ? 1 : 0;
             return m;
         }

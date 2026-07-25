@@ -69,6 +69,24 @@ namespace BTHome
         }
     };
 
+    // Object family, independent of the ~90 raw object ids. Assigned to every
+    // id by detail::object_layout() (bthome_objects.h) and used to pick the
+    // right serialization rule on both the encode and the decode side.
+    enum class ObjectKind : uint8_t
+    {
+        Unknown,         // id not known to this library version
+        PacketId,        // 0x00
+        Sensor,          // measurement, scaled or exact integer
+        Binary,          // binary sensor
+        ButtonEvent,     // 0x3A
+        DimmerEvent,     // 0x3C
+        CommandEvent,    // 0x3B
+        Text,            // 0x53
+        Raw,             // 0x54
+        DeviceTypeId,    // 0xF0
+        FirmwareVersion, // 0xF1 / 0xF2
+    };
+
     // Misc data object IDs.
     enum class MiscObjectId : uint8_t
     {
