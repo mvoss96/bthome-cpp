@@ -89,13 +89,12 @@ namespace BTHome
         uint8_t steps() const { return static_cast<uint8_t>((raw >> 8) & 0xFFu); }
 
         /**
-         * @brief Compares against any of the BTHome object id enums.
-         * @tparam ObjectIdEnum One of SensorObjectId, BinaryObjectId, ...
-         * @param id Object id to test for.
+         * @brief Compares against a BTHome object id.
+         * @param id Object id to test for. Only ObjectId is accepted, so an
+         *        event code cannot be passed here by mistake.
          * @return true when this object carries that id.
          */
-        template <typename ObjectIdEnum>
-        bool is(ObjectIdEnum id) const { return object_id == detail::oid(id); }
+        bool is(ObjectId id) const { return object_id == detail::oid(id); }
     };
 
     class Decoder

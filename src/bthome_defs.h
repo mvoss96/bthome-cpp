@@ -87,15 +87,23 @@ namespace BTHome
         FirmwareVersion, // 0xF1 / 0xF2
     };
 
-    // Misc data object IDs.
-    enum class MiscObjectId : uint8_t
+    /**
+     * @brief Every BTHome object id, in one type.
+     *
+     * The id space is flat on the wire, and one type lets oid() and
+     * Decoded::is() be plain functions that reject anything which is not an
+     * object id. With five separate enums they had to be templates over "any
+     * enum", so comparing an event *code* against an object id compiled and
+     * silently matched - ButtonEventType::Press and Battery are both 0x01.
+     *
+     * Grouped the way https://bthome.io/format/ lists them.
+     */
+    enum class ObjectId : uint8_t
     {
+        // Misc data
         PacketId = 0x00,
-    };
 
-    // Sensor data object IDs.
-    enum class SensorObjectId : uint8_t
-    {
+        // Sensor data
         Battery = 0x01,
         Temperature = 0x02,
         Humidity = 0x03,
@@ -159,11 +167,8 @@ namespace BTHome
         AccelerationS32 = 0x63,
         LightLevel = 0x64,
         SettingsRevision = 0x65,
-    };
 
-    // Binary sensor data object IDs.
-    enum class BinaryObjectId : uint8_t
-    {
+        // Binary sensor data
         GenericBoolean = 0x0F,
         PowerState = 0x10,
         Opening = 0x11,
@@ -193,17 +198,19 @@ namespace BTHome
         Tamper = 0x2B,
         Vibration = 0x2C,
         Window = 0x2D,
-    };
 
-    // Event object IDs.
-    enum class EventObjectId : uint8_t
-    {
+        // Events
         ButtonEvent = 0x3A,
         CommandEvent = 0x3B,
         DimmerEvent = 0x3C,
+
+        // Device information
+        DeviceTypeId = 0xF0,
+        FirmwareVersionU32 = 0xF1,
+        FirmwareVersionU24 = 0xF2,
     };
 
-    // Button event codes (value byte of EventObjectId::ButtonEvent).
+    // Button event codes (value byte of ObjectId::ButtonEvent).
     enum class ButtonEventType : uint8_t
     {
         // Placeholder for "no event": with several buttons, the k-th 0x3A
@@ -219,7 +226,7 @@ namespace BTHome
         HoldPress = 0x80,
     };
 
-    // Dimmer event codes (first value byte of EventObjectId::DimmerEvent).
+    // Dimmer event codes (first value byte of ObjectId::DimmerEvent).
     enum class DimmerEventType : uint8_t
     {
         None = 0x00,
@@ -227,7 +234,7 @@ namespace BTHome
         RotateRight = 0x02,
     };
 
-    // Command event opcodes (EventObjectId::CommandEvent). Serialized as
+    // Command event opcodes (ObjectId::CommandEvent). Serialized as
     // [argument count][opcode][arguments...]; StepUp/StepDown carry one
     // step-count argument. The spec advises sending commands only in
     // encrypted advertisements, since anyone can observe or spoof them.
@@ -238,14 +245,6 @@ namespace BTHome
         Toggle = 0x02,
         StepUp = 0x03,
         StepDown = 0x04,
-    };
-
-    // Device object IDs.
-    enum class DeviceObjectId : uint8_t
-    {
-        DeviceTypeId = 0xF0,
-        FirmwareVersionU32 = 0xF1,
-        FirmwareVersionU24 = 0xF2,
     };
 
 } // namespace BTHome

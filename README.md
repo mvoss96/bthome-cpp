@@ -123,9 +123,9 @@ BTHome::Decoded obj;
 while (dec.next(obj))
 {
     // is() compares against the object id enums - no hex literals, no casts.
-    if (obj.is(BTHome::SensorObjectId::Temperature)) { publish(obj.value); }
-    else if (obj.is(BTHome::BinaryObjectId::Motion)) { publish(obj.on()); }
-    else if (obj.is(BTHome::EventObjectId::DimmerEvent)) { publish(obj.event(), obj.steps()); }
+    if (obj.is(BTHome::ObjectId::Temperature)) { publish(obj.value); }
+    else if (obj.is(BTHome::ObjectId::Motion)) { publish(obj.on()); }
+    else if (obj.is(BTHome::ObjectId::DimmerEvent)) { publish(obj.event(), obj.steps()); }
 }
 
 if (dec.status() != BTHome::DecodeStatus::End)

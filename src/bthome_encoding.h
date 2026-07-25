@@ -93,7 +93,7 @@ namespace BTHome
          * @param value Physical value to encode.
          * @return Encoded Measurement.
          */
-        template <auto Id>
+        template <ObjectId Id>
         inline Measurement make_sensor(float value)
         {
             constexpr uint8_t byte_id = oid(Id);
@@ -175,7 +175,7 @@ namespace BTHome
          * @param raw Unsigned raw value.
          * @return Encoded Measurement.
          */
-        template <auto Id>
+        template <ObjectId Id>
         inline Measurement u(uint64_t raw)
         {
             constexpr uint8_t byte_id = oid(Id);
@@ -191,7 +191,7 @@ namespace BTHome
          * @param raw Signed raw value.
          * @return Encoded Measurement.
          */
-        template <auto Id>
+        template <ObjectId Id>
         inline Measurement s(int64_t raw)
         {
             constexpr uint8_t byte_id = oid(Id);
@@ -208,7 +208,7 @@ namespace BTHome
          * @param on Boolean payload value.
          * @return Encoded Measurement.
          */
-        template <auto Id>
+        template <ObjectId Id>
         inline Measurement b(bool on)
         {
             constexpr uint8_t byte_id = oid(Id);
