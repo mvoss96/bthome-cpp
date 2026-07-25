@@ -1,6 +1,6 @@
 # BTHome-cpp
 
-Dependency-free C++17 BTHome v2 payload builder.
+Dependency-free C++17 BTHome v2 payload builder and parser.
 
 - Header-only library
 - No heap allocation
