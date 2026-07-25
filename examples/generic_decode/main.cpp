@@ -29,17 +29,17 @@ static bool decodeAdElement(const char* label, const uint8_t* ad, size_t len) {
         // is() compares against the object id enums - no hex literals, no
         // casts. Sensors carry value; events and exact integers carry raw,
         // which event() and steps() read back.
-        if (obj.is(BTHome::MiscObjectId::PacketId)) {
+        if (obj.is(BTHome::ObjectId::PacketId)) {
             printf("  packet id    %u\n", static_cast<unsigned>(obj.raw));
-        } else if (obj.is(BTHome::SensorObjectId::Battery)) {
+        } else if (obj.is(BTHome::ObjectId::Battery)) {
             printf("  battery      %.0f %%\n", static_cast<double>(obj.value));
-        } else if (obj.is(BTHome::SensorObjectId::Temperature)) {
+        } else if (obj.is(BTHome::ObjectId::Temperature)) {
             printf("  temperature  %.2f C\n", static_cast<double>(obj.value));
-        } else if (obj.is(BTHome::SensorObjectId::Humidity)) {
+        } else if (obj.is(BTHome::ObjectId::Humidity)) {
             printf("  humidity     %.1f %%\n", static_cast<double>(obj.value));
-        } else if (obj.is(BTHome::EventObjectId::ButtonEvent)) {
+        } else if (obj.is(BTHome::ObjectId::ButtonEvent)) {
             printf("  button       event %u\n", obj.event());
-        } else if (obj.is(BTHome::EventObjectId::DimmerEvent)) {
+        } else if (obj.is(BTHome::ObjectId::DimmerEvent)) {
             printf("  dimmer       event %u, %u steps\n", obj.event(), obj.steps());
         }
     }

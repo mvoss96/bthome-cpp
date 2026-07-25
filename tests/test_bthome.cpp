@@ -726,7 +726,7 @@ static void test_non_finite_values()
         const size_t before = p.serviceDataSize();
 
         BTHome::Measurement empty;
-        empty.object_id = static_cast<uint8_t>(BTHome::SensorObjectId::Temperature);
+        empty.object_id = static_cast<uint8_t>(BTHome::ObjectId::Temperature);
         empty.len = 0;
         expect_true("zero-length measurement rejected", !p.add(empty));
         expect_true("zero-length measurement leaves packet untouched",

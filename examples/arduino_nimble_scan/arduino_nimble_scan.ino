@@ -29,11 +29,11 @@ class ScanCallbacks : public NimBLEScanCallbacks {
     // object id enums, so no hex literals and no casts.
     BTHome::Decoded obj;
     while (dec.next(obj)) {
-      if (obj.is(BTHome::SensorObjectId::Temperature)) {
+      if (obj.is(BTHome::ObjectId::Temperature)) {
         Serial.printf("  temperature %.2f C\n", obj.value);
-      } else if (obj.is(BTHome::SensorObjectId::Humidity)) {
+      } else if (obj.is(BTHome::ObjectId::Humidity)) {
         Serial.printf("  humidity    %.1f %%\n", obj.value);
-      } else if (obj.is(BTHome::SensorObjectId::Battery)) {
+      } else if (obj.is(BTHome::ObjectId::Battery)) {
         Serial.printf("  battery     %.0f %%\n", obj.value);
       }
     }
