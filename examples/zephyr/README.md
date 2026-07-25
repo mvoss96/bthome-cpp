@@ -9,11 +9,11 @@ Add the repository to your manifest:
 
 ```yaml
 manifest:
-    projects:
-        - name: bthome-cpp
-            url: https://github.com/mvoss96/bthome-cpp
-            revision: main
-            path: modules/lib/bthome-cpp
+  projects:
+    - name: bthome-cpp
+      url: https://github.com/mvoss96/bthome-cpp
+      revision: main
+      path: modules/lib/bthome-cpp
 ```
 
 Then initialize/update your workspace:

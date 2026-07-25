@@ -1,5 +1,5 @@
-version: "0.1.0"
-description: "Dependency-free C++17 BTHome v2 payload builder (header-only)."
+version: "0.4.1"
+description: "Dependency-free C++17 BTHome v2 payload builder and parser (header-only). Sensors, binary sensors, events, text/raw, AES-CCM encryption and decryption with pluggable crypto backends."
 license: "MIT"
 url: "https://github.com/mvoss96/bthome-cpp"
 repository: "https://github.com/mvoss96/bthome-cpp.git"

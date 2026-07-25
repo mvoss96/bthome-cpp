@@ -471,7 +471,12 @@ public:
      *        directly.
      * @param out_capacity Capacity of @p out.
      * @param out_len Set to the number of bytes written on success.
-     * @return DecryptStatus::Ok on success; @p out is untouched otherwise.
+     * @return DecryptStatus::Ok on success. On AuthFailed the object bytes of
+     *         @p out have already been overwritten by the cipher backend -
+     *         decryption runs before the MIC can be checked, and there is no
+     *         way around that - so @p out holds no usable data unless Ok is
+     *         returned. Every other status returns before the cipher and
+     *         leaves @p out alone.
      */
     DecryptStatus decryptServiceData(const uint8_t *service_data, size_t len,
                                      uint8_t *out, size_t out_capacity,
@@ -490,7 +495,10 @@ public:
      *        ready for BTHome::Decoder::fromPayload().
      * @param out_capacity Capacity of @p out.
      * @param out_len Set to the number of bytes written on success.
-     * @return DecryptStatus::Ok on success; @p out is untouched otherwise.
+     * @return DecryptStatus::Ok on success; @p out holds no usable data
+     *         otherwise, and is clobbered on AuthFailed (see
+     *         decryptServiceData()). Do not keep last-good plaintext in the
+     *         buffer you decrypt into.
      */
     DecryptStatus decryptPayload(const uint8_t *payload, size_t len,
                                  uint8_t *out, size_t out_capacity,
@@ -558,6 +566,11 @@ private:
         uint8_t nonce[Encryptor::kNonceBytes];
         detail::build_nonce(m_mac, Encryptor::kMacBytes, device_info, counter, nonce);
 
+        // Decrypting straight into the caller's buffer: CCM cannot verify the
+        // MIC before it has decrypted, so a scratch buffer would only move the
+        // clobbering, at the cost of another packet's worth of RAM on a part
+        // that may have 2 KB. Hence the documented rule that out means nothing
+        // unless Ok comes back.
         if (!m_fn(m_key, nonce, ciphertext, cipher_len, mic, out + header))
         {
             return DecryptStatus::AuthFailed;
