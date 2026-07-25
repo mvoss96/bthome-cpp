@@ -38,10 +38,82 @@ using CcmEncryptFn = bool (*)(const uint8_t *key,
                               uint8_t *ciphertext,
                               uint8_t *mic);
 
+/**
+ * @brief AES-128-CCM decrypt-and-verify callback used by Decryptor.
+ *
+ * The mirror of CcmEncryptFn. Implementations must verify @p mic and return
+ * false when it does not match - the library relies on that to reject a
+ * tampered or wrong-key packet, and never looks at @p plaintext otherwise.
+ *
+ * @param key        16-byte AES key.
+ * @param nonce      13-byte CCM nonce.
+ * @param ciphertext Input bytes to decrypt.
+ * @param length     Number of ciphertext/plaintext bytes.
+ * @param mic        4-byte message integrity check to verify against.
+ * @param plaintext  Output buffer for @p length decrypted bytes.
+ * @return true when the MIC verified and @p plaintext is valid.
+ */
+using CcmDecryptFn = bool (*)(const uint8_t *key,
+                              const uint8_t *nonce,
+                              const uint8_t *ciphertext,
+                              size_t length,
+                              const uint8_t *mic,
+                              uint8_t *plaintext);
+
+/**
+ * @brief Why a decryption attempt ended.
+ *
+ * Told apart because they call for different reactions: Replay is normal
+ * radio noise and should be dropped quietly, AuthFailed means a wrong bindkey
+ * or a tampered packet and is worth logging, NotEncrypted means the sender is
+ * not configured the way this receiver expects.
+ */
+enum class DecryptStatus : uint8_t
+{
+    Ok,           // plaintext written, counter accepted
+    NoBackend,    // no cipher backend was set on the Decryptor
+    BadBuffer,    // input too short to hold counter and MIC, or output too small
+    NotEncrypted, // the device-info encrypted bit is not set
+    Replay,       // counter did not advance - a captured packet sent again
+    AuthFailed,   // MIC mismatch: wrong key, or the packet was tampered with
+};
+
 class Encryptor;
 
 template <size_t AdvCapacity>
 class EncryptedPacket;
+
+namespace detail
+{
+
+/**
+ * @brief Builds the BTHome v2 CCM nonce, for both directions.
+ *
+ * MAC(6) + UUID little-endian(2) + device-info(1) + counter little-endian(4).
+ * Sender and receiver must agree on every byte, so this exists once.
+ *
+ * @param mac       Device MAC in display order.
+ * @param mac_bytes Number of MAC bytes (6).
+ * @param device_info Device-information byte exactly as transmitted.
+ * @param counter   Counter value belonging to this packet.
+ * @param out       Receives 13 nonce bytes.
+ */
+inline void build_nonce(const uint8_t *mac, size_t mac_bytes,
+                        uint8_t device_info, uint32_t counter,
+                        uint8_t *out)
+{
+    memcpy(out, mac, mac_bytes);
+    size_t p = mac_bytes;
+    out[p++] = static_cast<uint8_t>(kServiceUuid & 0xFFu);
+    out[p++] = static_cast<uint8_t>(kServiceUuid >> 8);
+    out[p++] = device_info;
+    out[p++] = static_cast<uint8_t>(counter & 0xFFu);
+    out[p++] = static_cast<uint8_t>((counter >> 8) & 0xFFu);
+    out[p++] = static_cast<uint8_t>((counter >> 16) & 0xFFu);
+    out[p++] = static_cast<uint8_t>((counter >> 24) & 0xFFu);
+}
+
+} // namespace detail
 
 /**
  * @brief Build an encrypted raw BLE advertising payload for BTHome.
@@ -162,17 +234,8 @@ private:
             return false;
         }
 
-        // Nonce: MAC(6) + UUID little-endian(2) + device-info(1) + counter little-endian(4).
         uint8_t nonce[kNonceBytes];
-        memcpy(nonce, m_mac, kMacBytes);
-        size_t p = kMacBytes;
-        nonce[p++] = static_cast<uint8_t>(kServiceUuid & 0xFFu);
-        nonce[p++] = static_cast<uint8_t>(kServiceUuid >> 8);
-        nonce[p++] = device_info;
-        nonce[p++] = static_cast<uint8_t>(m_counter & 0xFFu);
-        nonce[p++] = static_cast<uint8_t>((m_counter >> 8) & 0xFFu);
-        nonce[p++] = static_cast<uint8_t>((m_counter >> 16) & 0xFFu);
-        nonce[p++] = static_cast<uint8_t>((m_counter >> 24) & 0xFFu);
+        detail::build_nonce(m_mac, kMacBytes, device_info, m_counter, nonce);
 
         if (!m_fn(m_key, nonce, plaintext, length, ciphertext, mic_out))
         {
@@ -333,5 +396,196 @@ int build_encrypted_advertising(const EncryptedPacket<AdvCapacity> &packet,
 
     return static_cast<int>(p);
 }
+
+/**
+ * @brief Holds the decryption material and verifies BTHome v2 ciphertexts.
+ *
+ * The mirror of Encryptor, and one instance per sender: bindkey, MAC and
+ * replay state are all per-device.
+ *
+ * Replay protection is not optional here. Every accepted packet's counter is
+ * remembered, and a packet whose counter does not exceed it is rejected -
+ * without that, a captured advertisement stays valid forever and can be
+ * replayed to fake a reading or a button press. The stored counter only moves
+ * after the MIC has verified, so a forged packet claiming a huge counter
+ * cannot lock out the real sender.
+ *
+ * Persist lastCounter() across reboots the way a sender persists its counter;
+ * without it the first packet after a restart is accepted whatever its
+ * counter, which reopens the replay window until the next packet arrives.
+ */
+class Decryptor
+{
+public:
+    /**
+     * @brief Constructs a Decryptor with a CCM backend.
+     * @param fn Backend callback performing AES-128-CCM decrypt-and-verify.
+     */
+    explicit Decryptor(CcmDecryptFn fn) : m_fn(fn) {}
+
+    /**
+     * @brief Sets the 16-byte AES key (the sender's bindkey).
+     * @param key Key bytes; copied into the Decryptor.
+     */
+    void setKey(const uint8_t (&key)[Encryptor::kKeyBytes])
+    {
+        memcpy(m_key, key, Encryptor::kKeyBytes);
+    }
+
+    /**
+     * @brief Sets the sender's MAC address used in the nonce.
+     * @param mac MAC bytes in display order, as the sender transmits them.
+     *        On BLE this is the advertiser address from the scan result.
+     */
+    void setMac(const uint8_t (&mac)[Encryptor::kMacBytes])
+    {
+        memcpy(m_mac, mac, Encryptor::kMacBytes);
+    }
+
+    /**
+     * @brief Returns the counter of the last accepted packet.
+     * @return Counter value; meaningless while haveCounter() is false.
+     */
+    uint32_t lastCounter() const { return m_last_counter; }
+
+    /** @brief Whether any packet has been accepted yet. */
+    bool haveCounter() const { return m_have_counter; }
+
+    /**
+     * @brief Restores the replay state, e.g. after a reboot.
+     * @param counter Highest counter already seen from this sender.
+     */
+    void setLastCounter(uint32_t counter)
+    {
+        m_last_counter = counter;
+        m_have_counter = true;
+    }
+
+    /**
+     * @brief Decrypts received BTHome service data.
+     *
+     * @param service_data [uuid lo][uuid hi][device info][ciphertext][counter][MIC].
+     * @param len Number of bytes in @p service_data.
+     * @param out Receives [uuid lo][uuid hi][device info][objects...] - the
+     *        encrypted bit is cleared, so the result feeds BTHome::Decoder
+     *        directly.
+     * @param out_capacity Capacity of @p out.
+     * @param out_len Set to the number of bytes written on success.
+     * @return DecryptStatus::Ok on success; @p out is untouched otherwise.
+     */
+    DecryptStatus decryptServiceData(const uint8_t *service_data, size_t len,
+                                     uint8_t *out, size_t out_capacity,
+                                     size_t &out_len)
+    {
+        return decryptInto(service_data, len, kUuidBytes, out, out_capacity, out_len);
+    }
+
+    /**
+     * @brief Decrypts a payload whose UUID the BLE stack already stripped.
+     *
+     * @param payload [device info][ciphertext][counter][MIC] - what NimBLE's
+     *        getServiceData() hands over.
+     * @param len Number of bytes in @p payload.
+     * @param out Receives [device info][objects...], encrypted bit cleared,
+     *        ready for BTHome::Decoder::fromPayload().
+     * @param out_capacity Capacity of @p out.
+     * @param out_len Set to the number of bytes written on success.
+     * @return DecryptStatus::Ok on success; @p out is untouched otherwise.
+     */
+    DecryptStatus decryptPayload(const uint8_t *payload, size_t len,
+                                 uint8_t *out, size_t out_capacity,
+                                 size_t &out_len)
+    {
+        return decryptInto(payload, len, 0, out, out_capacity, out_len);
+    }
+
+private:
+    static constexpr size_t kUuidBytes = 2;
+
+    // Shared by both entry points; uuid_bytes is 2 when the buffer still
+    // carries the service UUID and 0 when the BLE stack already removed it.
+    DecryptStatus decryptInto(const uint8_t *data, size_t len, size_t uuid_bytes,
+                              uint8_t *out, size_t out_capacity, size_t &out_len)
+    {
+        if (m_fn == nullptr)
+        {
+            return DecryptStatus::NoBackend;
+        }
+
+        const size_t header = uuid_bytes + 1; // device-info byte follows the UUID
+        if (data == nullptr || out == nullptr || len < header)
+        {
+            return DecryptStatus::BadBuffer;
+        }
+
+        // Checked before the length: a plaintext packet is shorter than the
+        // encryption overhead, and reporting it as a bad buffer would send a
+        // receiver looking for a radio fault instead of a misconfigured sender.
+        const uint8_t device_info = data[uuid_bytes];
+        if ((device_info & DeviceInfo::kEncryptedBit) == 0)
+        {
+            return DecryptStatus::NotEncrypted;
+        }
+
+        if (len < header + Encryptor::kOverheadBytes)
+        {
+            return DecryptStatus::BadBuffer;
+        }
+
+        const size_t cipher_len = len - header - Encryptor::kOverheadBytes;
+        if (out_capacity < header + cipher_len)
+        {
+            return DecryptStatus::BadBuffer;
+        }
+
+        const uint8_t *ciphertext = data + header;
+        const uint8_t *counter_bytes = ciphertext + cipher_len;
+        const uint8_t *mic = counter_bytes + Encryptor::kCounterBytes;
+
+        const uint32_t counter = static_cast<uint32_t>(counter_bytes[0]) |
+                                 (static_cast<uint32_t>(counter_bytes[1]) << 8) |
+                                 (static_cast<uint32_t>(counter_bytes[2]) << 16) |
+                                 (static_cast<uint32_t>(counter_bytes[3]) << 24);
+
+        // Cheap check first: a replay never reaches the cipher.
+        if (m_have_counter && counter <= m_last_counter)
+        {
+            return DecryptStatus::Replay;
+        }
+
+        // The nonce uses the device-info byte exactly as transmitted, so it is
+        // built before the encrypted bit is cleared for the output.
+        uint8_t nonce[Encryptor::kNonceBytes];
+        detail::build_nonce(m_mac, Encryptor::kMacBytes, device_info, counter, nonce);
+
+        if (!m_fn(m_key, nonce, ciphertext, cipher_len, mic, out + header))
+        {
+            return DecryptStatus::AuthFailed;
+        }
+
+        // Only now is the counter trusted: moving it on an unauthenticated
+        // packet would let anyone lock this receiver out of its sender.
+        m_last_counter = counter;
+        m_have_counter = true;
+
+        if (uuid_bytes != 0)
+        {
+            out[0] = static_cast<uint8_t>(kServiceUuid & 0xFFu);
+            out[1] = static_cast<uint8_t>(kServiceUuid >> 8);
+        }
+        // The objects that follow are plaintext now, so the flag has to go -
+        // otherwise Decoder would refuse the very buffer it just produced.
+        out[uuid_bytes] = static_cast<uint8_t>(device_info & ~DeviceInfo::kEncryptedBit);
+
+        out_len = header + cipher_len;
+        return DecryptStatus::Ok;
+    }
+
+    CcmDecryptFn m_fn = nullptr;
+    uint8_t m_key[Encryptor::kKeyBytes] = {};
+    uint8_t m_mac[Encryptor::kMacBytes] = {};
+    uint32_t m_last_counter = 0;
+    bool m_have_counter = false;
+};
 
 } // namespace BTHome

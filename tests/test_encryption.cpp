@@ -213,6 +213,233 @@ static void test_error_paths()
     expect_true("error: counter untouched after backend failure", failing.counter() == 7);
 }
 
+// Builds the spec-vector advertisement and returns its service-data section,
+// which is what a receiver gets: [uuid][info][ciphertext][counter][MIC].
+static size_t buildEncryptedServiceData(uint32_t counter, uint8_t *out, size_t out_capacity)
+{
+    BTHome::EncryptedPacket<28> packet;
+    packet.add(BTHome::temperature(25.06f));
+    packet.add(BTHome::humidity(50.55f));
+
+    BTHome::Encryptor encryptor(&BTHome::mbedtls_ccm_backend);
+    encryptor.setKey(kSpecKey);
+    encryptor.setMac(kSpecMac);
+    encryptor.setCounter(counter);
+
+    uint8_t adv[31] = {};
+    const int size = BTHome::build_encrypted_advertising(packet, encryptor, adv, sizeof(adv));
+    if (size <= 5)
+    {
+        return 0;
+    }
+    // Skip the Flags AD (3 bytes) and the AD length/type pair (2 bytes).
+    const size_t sd_len = static_cast<size_t>(size) - 5;
+    if (sd_len > out_capacity)
+    {
+        return 0;
+    }
+    memcpy(out, adv + 5, sd_len);
+    return sd_len;
+}
+
+static BTHome::Decryptor makeDecryptor()
+{
+    BTHome::Decryptor d(&BTHome::mbedtls_ccm_decrypt_backend);
+    d.setKey(kSpecKey);
+    d.setMac(kSpecMac);
+    return d;
+}
+
+static void test_decrypt_round_trip()
+{
+    // Tests: An advertisement built by the library, decrypted and decoded back.
+    // Expects: The original measurements, and a buffer the Decoder accepts -
+    //          which means the encrypted bit must be cleared in the output.
+    uint8_t sd[32] = {};
+    const size_t sd_len = buildEncryptedServiceData(kSpecCounter, sd, sizeof(sd));
+    expect_true("decrypt: encrypted service data built", sd_len > 0);
+
+    BTHome::Decryptor decryptor = makeDecryptor();
+    uint8_t plain[32] = {};
+    size_t plain_len = 0;
+    const BTHome::DecryptStatus status =
+        decryptor.decryptServiceData(sd, sd_len, plain, sizeof(plain), plain_len);
+
+    expect_true("decrypt: status Ok", status == BTHome::DecryptStatus::Ok);
+    expect_true("decrypt: counter recorded",
+                decryptor.haveCounter() && decryptor.lastCounter() == kSpecCounter);
+
+    const uint8_t want_plain[] = {0xD2, 0xFC, 0x40, 0x02, 0xCA, 0x09, 0x03, 0xBF, 0x13};
+    expect_bytes("decrypt: plaintext service data", plain, plain_len,
+                 want_plain, sizeof(want_plain));
+
+    // The decisive part: the result goes straight into the Decoder.
+    BTHome::Decoder dec(plain, plain_len);
+    BTHome::Decoded obj;
+    float temperature = 0.0f;
+    float humidity = 0.0f;
+    while (dec.next(obj))
+    {
+        if (obj.is(BTHome::ObjectId::Temperature)) { temperature = obj.value; }
+        else if (obj.is(BTHome::ObjectId::Humidity)) { humidity = obj.value; }
+    }
+    expect_true("decrypt: decodes cleanly", dec.status() == BTHome::DecodeStatus::End);
+    expect_true("decrypt: temperature 25.06", temperature > 25.05f && temperature < 25.07f);
+    expect_true("decrypt: humidity 50.55", humidity > 50.54f && humidity < 50.56f);
+}
+
+static void test_decrypt_payload_entry_point()
+{
+    // Tests: The UUID-less shape a BLE stack such as NimBLE hands over.
+    // Expects: Same plaintext, minus the two UUID bytes, usable with
+    //          Decoder::fromPayload().
+    uint8_t sd[32] = {};
+    const size_t sd_len = buildEncryptedServiceData(kSpecCounter, sd, sizeof(sd));
+
+    BTHome::Decryptor decryptor = makeDecryptor();
+    uint8_t plain[32] = {};
+    size_t plain_len = 0;
+    const BTHome::DecryptStatus status =
+        decryptor.decryptPayload(sd + 2, sd_len - 2, plain, sizeof(plain), plain_len);
+
+    expect_true("payload: status Ok", status == BTHome::DecryptStatus::Ok);
+    const uint8_t want_plain[] = {0x40, 0x02, 0xCA, 0x09, 0x03, 0xBF, 0x13};
+    expect_bytes("payload: plaintext without uuid", plain, plain_len,
+                 want_plain, sizeof(want_plain));
+
+    BTHome::Decoder dec = BTHome::Decoder::fromPayload(plain, plain_len);
+    BTHome::Decoded obj;
+    size_t count = 0;
+    while (dec.next(obj)) { ++count; }
+    expect_true("payload: two objects, clean end",
+                count == 2 && dec.status() == BTHome::DecodeStatus::End);
+}
+
+static void test_decrypt_psa_backend()
+{
+    // Tests: The identical round trip through the PSA Crypto adapter.
+    // Expects: Same plaintext as the mbedtls adapter, and a rejected MIC on a
+    //          tampered packet - the two backends must be interchangeable in
+    //          both directions, not just for encryption.
+    uint8_t sd[32] = {};
+    const size_t sd_len = buildEncryptedServiceData(kSpecCounter, sd, sizeof(sd));
+
+    BTHome::Decryptor decryptor(&BTHome::psa_ccm_decrypt_backend);
+    decryptor.setKey(kSpecKey);
+    decryptor.setMac(kSpecMac);
+
+    uint8_t plain[32] = {};
+    size_t plain_len = 0;
+    expect_true("psa decrypt: status Ok",
+                decryptor.decryptServiceData(sd, sd_len, plain, sizeof(plain), plain_len) ==
+                    BTHome::DecryptStatus::Ok);
+
+    const uint8_t want_plain[] = {0xD2, 0xFC, 0x40, 0x02, 0xCA, 0x09, 0x03, 0xBF, 0x13};
+    expect_bytes("psa decrypt: plaintext matches mbedtls", plain, plain_len,
+                 want_plain, sizeof(want_plain));
+
+    // The rejoin of ciphertext and MIC is PSA-specific; a tampered byte has to
+    // fail there too, otherwise the adapter would be accepting anything.
+    uint8_t tampered[32] = {};
+    memcpy(tampered, sd, sd_len);
+    tampered[sd_len - 1] ^= 0x01; // last MIC byte
+    BTHome::Decryptor fresh(&BTHome::psa_ccm_decrypt_backend);
+    fresh.setKey(kSpecKey);
+    fresh.setMac(kSpecMac);
+    expect_true("psa decrypt: tampered MIC rejected",
+                fresh.decryptServiceData(tampered, sd_len, plain, sizeof(plain), plain_len) ==
+                    BTHome::DecryptStatus::AuthFailed);
+}
+
+static void test_decrypt_rejections()
+{
+    uint8_t sd[32] = {};
+    const size_t sd_len = buildEncryptedServiceData(kSpecCounter, sd, sizeof(sd));
+    uint8_t plain[32] = {};
+    size_t plain_len = 0;
+
+    // Tests: A replayed packet - the same bytes a second time.
+    // Expects: Replay, because the counter did not advance. This is the
+    //          property that makes a captured advertisement worthless.
+    {
+        BTHome::Decryptor decryptor = makeDecryptor();
+        expect_true("replay: first packet accepted",
+                    decryptor.decryptServiceData(sd, sd_len, plain, sizeof(plain), plain_len) ==
+                        BTHome::DecryptStatus::Ok);
+        expect_true("replay: same packet again rejected",
+                    decryptor.decryptServiceData(sd, sd_len, plain, sizeof(plain), plain_len) ==
+                        BTHome::DecryptStatus::Replay);
+    }
+
+    // Tests: A wrong bindkey.
+    // Expects: AuthFailed, and the replay state left untouched - otherwise an
+    //          attacker could push the counter forward and lock out the sender.
+    {
+        BTHome::Decryptor decryptor(&BTHome::mbedtls_ccm_decrypt_backend);
+        uint8_t wrong_key[BTHome::Encryptor::kKeyBytes] = {};
+        memcpy(wrong_key, kSpecKey, sizeof(wrong_key));
+        wrong_key[0] ^= 0xFF;
+        decryptor.setKey(wrong_key);
+        decryptor.setMac(kSpecMac);
+
+        expect_true("wrong key: rejected",
+                    decryptor.decryptServiceData(sd, sd_len, plain, sizeof(plain), plain_len) ==
+                        BTHome::DecryptStatus::AuthFailed);
+        expect_true("wrong key: replay state untouched", !decryptor.haveCounter());
+    }
+
+    // Tests: A tampered ciphertext byte.
+    // Expects: AuthFailed - the MIC covers the ciphertext.
+    {
+        uint8_t tampered[32] = {};
+        memcpy(tampered, sd, sd_len);
+        tampered[3] ^= 0x01; // first ciphertext byte
+        BTHome::Decryptor decryptor = makeDecryptor();
+        expect_true("tampered: rejected",
+                    decryptor.decryptServiceData(tampered, sd_len, plain, sizeof(plain), plain_len) ==
+                        BTHome::DecryptStatus::AuthFailed);
+    }
+
+    // Tests: A plaintext packet, a truncated buffer, an output buffer too
+    // small, and a Decryptor without a backend.
+    // Expects: One distinct status each, so a receiver can tell them apart.
+    {
+        BTHome::Decryptor decryptor = makeDecryptor();
+        BTHome::Packet<31> plainPacket;
+        plainPacket.add(BTHome::temperature(21.0f));
+        expect_true("plaintext input: NotEncrypted",
+                    decryptor.decryptServiceData(plainPacket.serviceData(),
+                                                 plainPacket.serviceDataSize(), plain,
+                                                 sizeof(plain), plain_len) ==
+                        BTHome::DecryptStatus::NotEncrypted);
+        expect_true("short input: BadBuffer",
+                    decryptor.decryptServiceData(sd, 5, plain, sizeof(plain), plain_len) ==
+                        BTHome::DecryptStatus::BadBuffer);
+        expect_true("small output: BadBuffer",
+                    decryptor.decryptServiceData(sd, sd_len, plain, 4, plain_len) ==
+                        BTHome::DecryptStatus::BadBuffer);
+
+        BTHome::Decryptor headless(nullptr);
+        expect_true("no backend: NoBackend",
+                    headless.decryptServiceData(sd, sd_len, plain, sizeof(plain), plain_len) ==
+                        BTHome::DecryptStatus::NoBackend);
+    }
+
+    // Tests: A later counter after a restored replay state.
+    // Expects: Accepted, and the stored counter moves forward.
+    {
+        uint8_t later[32] = {};
+        const size_t later_len = buildEncryptedServiceData(kSpecCounter + 5, later, sizeof(later));
+        BTHome::Decryptor decryptor = makeDecryptor();
+        decryptor.setLastCounter(kSpecCounter);
+        expect_true("advanced counter: accepted",
+                    decryptor.decryptServiceData(later, later_len, plain, sizeof(plain), plain_len) ==
+                        BTHome::DecryptStatus::Ok);
+        expect_true("advanced counter: state moved",
+                    decryptor.lastCounter() == kSpecCounter + 5);
+    }
+}
+
 int main()
 {
     test_spec_vector();
@@ -221,6 +448,10 @@ int main()
     test_trigger_flag_in_nonce();
     test_capacity_accounting();
     test_error_paths();
+    test_decrypt_round_trip();
+    test_decrypt_payload_entry_point();
+    test_decrypt_psa_backend();
+    test_decrypt_rejections();
 
     return test_summary();
 }

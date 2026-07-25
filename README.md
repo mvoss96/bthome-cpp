@@ -185,6 +185,44 @@ survive reboots: persist `encryptor.counter()` periodically and restore it
 with a safety margin via `setCounter()` — receivers reject non-increasing
 counters as replays. Encryption costs 8 bytes of advertisement budget.
 
+### Decryption
+
+`BTHome::Decryptor` is the mirror: same key, same MAC, same nonce construction,
+with `mbedtls_ccm_decrypt_backend` / `psa_ccm_decrypt_backend` as adapters.
+
+```cpp
+BTHome::Decryptor decryptor(&BTHome::mbedtls_ccm_decrypt_backend);
+decryptor.setKey(key);
+decryptor.setMac(sender_mac);            // from the BLE scan result
+decryptor.setLastCounter(persisted);     // restore after reboot!
+
+uint8_t plain[32];
+size_t plain_len = 0;
+const auto status = decryptor.decryptServiceData(sd, sd_len, plain, sizeof(plain), plain_len);
+if (status == BTHome::DecryptStatus::Ok)
+{
+    BTHome::Decoder dec(plain, plain_len);   // encrypted bit is cleared for you
+    ...
+}
+```
+
+Replay protection is not optional: the counter of every accepted packet is
+remembered, and a packet whose counter does not advance is rejected with
+`DecryptStatus::Replay`. Without it a captured advertisement stays valid
+forever and can be replayed to fake a reading or a button press. The stored
+counter only moves after the MIC has verified, so a forged packet claiming a
+huge counter cannot lock a receiver out of its sender. Persisting
+`lastCounter()` across reboots matters for the same reason a sender persists
+its counter — until the first packet after a restart, there is nothing to
+compare against.
+
+`decryptPayload()` takes the UUID-less shape that NimBLE's `getServiceData()`
+returns, and pairs with `Decoder::fromPayload()`.
+
+The other statuses are told apart because they call for different reactions:
+`AuthFailed` means a wrong bindkey or a tampered packet, `NotEncrypted` means
+the sender is not configured the way this receiver expects.
+
 ## Local checks
 
 Build and run host tests from project root:
@@ -218,11 +256,13 @@ pip install bthome-ble
 - Arduino NimBLE: `examples/arduino_nimble/arduino_nimble.ino`
 - Arduino NimBLE receiving, the counterpart of the above: `examples/arduino_nimble_scan/arduino_nimble_scan.ino`
 - Arduino NimBLE encrypted (MAC + Preferences counter): `examples/arduino_nimble_encrypted/arduino_nimble_encrypted.ino`
+- Arduino NimBLE encrypted receiving, the counterpart of the above: `examples/arduino_nimble_encrypted_scan/arduino_nimble_encrypted_scan.ino`
 - ESP-IDF: `examples/esp_idf/main/main.cpp`
 - ESP-IDF encrypted (MAC + NVS counter persistence): `examples/esp_idf_encrypted/main/main.cpp`
 - Generic C++: `examples/generic/main.cpp`
 - Generic C++ decoding, the counterpart of the above: `examples/generic_decode/main.cpp`
 - Generic encrypted (prints the official spec vector): `examples/generic_encrypted/main.cpp`
+- Generic decryption, the counterpart of the above: `examples/generic_decrypt/main.cpp`
 - Zephyr: `examples/zephyr/src/main.cpp`
 - Zephyr encrypted (PSA Crypto backend, MAC byte-order handling): `examples/zephyr_encrypted/src/main.cpp`
 
