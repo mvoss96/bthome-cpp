@@ -14,10 +14,18 @@
 // objects instead of to a worst case. On an ATmega328P that is ~1 KB of flash
 // and 37 bytes of stack per packet; the emitted bytes are identical.
 //
-//   BTHome::StaticPacket<BTHome::ObjectId::PacketId,
-//                        BTHome::ObjectId::Temperature,
-//                        BTHome::ObjectId::Humidity> packet;
-//   packet.put<BTHome::ObjectId::Temperature>(BTHome::temperature(22.4f));
+//   BTHome::StaticPacket packet(BTHome::packet_id(7),
+//                               BTHome::temperature(22.4f),
+//                               BTHome::humidity(54.3f));
+//
+// The ids come from the values: the factories return Typed<Id>, which carries
+// the object id in its type, so the layout is deduced and an id can never be
+// paired with the wrong value.
+//
+// A StaticPacket always transmits its whole set - the layout is fixed, so an
+// object cannot be left out. A value the factory could not encode (make_sensor
+// drops NaN and the infinities) therefore goes on the air as zero rather than
+// being omitted. Use Packet where a sensor can be unavailable.
 //
 // Not a replacement for Packet. Use Packet when the object set varies between
 // packets, for Text/Raw/command events (their length is not a compile-time
@@ -91,47 +99,27 @@ namespace BTHome
 
     public:
         /**
-         * @brief Builds the header and writes every object id into its slot.
+         * @brief Builds the packet from one value per object.
          *
-         * Value bytes stay zero until a put(); an object that is never written
-         * therefore transmits as zero rather than being left out.
+         * The object ids are deduced from the arguments, so the class template
+         * arguments need not be written out:
+         *
+         *   BTHome::StaticPacket packet(BTHome::temperature(22.4f),
+         *                               BTHome::humidity(54.3f));
+         *
+         * Order does not matter - objects are placed by id, as BTHome
+         * requires. Every object gets a value; there is no half-filled packet.
+         *
+         * @param ms One measurement per object id, from the factories.
          */
-        StaticPacket()
+        explicit StaticPacket(const Typed<Ids> &...ms)
         {
             ServiceDataHeader header{};
             header.writeTo(m_buf);
             m_buf[0] = static_cast<uint8_t>(totalBytes() - 1);
-            // A fold rather than a loop over a table: the ids are baked in as
-            // constants, so nothing is emitted into RAM.
-            ((m_buf[offsetOf(detail::oid(Ids))] = detail::oid(Ids)), ...);
-        }
-
-        /**
-         * @brief Writes one object's value bytes into its compile-time slot.
-         * @tparam Id Which object to write; must be one of the packet's ids.
-         * @param m Measurement from the matching factory.
-         * @return false when @p m carries a different object id than @p Id,
-         *         which would otherwise write one object's bytes into
-         *         another's slot. The check is a single byte compare and
-         *         folds away when the factory call is inlined.
-         */
-        template <ObjectId Id>
-        bool put(const Measurement &m)
-        {
-            static_assert(occurrences(detail::oid(Id)) == 1,
-                          "this object id is not part of the packet");
-            constexpr size_t off = offsetOf(detail::oid(Id));
-            constexpr uint8_t width = detail::object_layout(detail::oid(Id)).width;
-
-            if (m.object_id != detail::oid(Id))
-            {
-                return false;
-            }
-            for (uint8_t i = 0; i < width; ++i)
-            {
-                m_buf[off + 1 + i] = m.data[i];
-            }
-            return true;
+            // A fold rather than a loop over a table: ids and offsets are
+            // constants here, so nothing is emitted into RAM.
+            (writeObject<Ids>(ms), ...);
         }
 
         /**
@@ -156,6 +144,22 @@ namespace BTHome
 
         /** @brief Size of serviceData() in bytes. */
         size_t serviceDataSize() const { return totalBytes() - 2; }
+
+    private:
+        // Writes one object at its compile-time offset. Takes the Typed
+        // directly rather than converting to a Measurement first, which would
+        // materialize six value bytes per object for nothing. No id check is
+        // needed: a Typed<Id> could not have been built for another object.
+        template <ObjectId Id>
+        void writeObject(const Typed<Id> &t)
+        {
+            constexpr size_t off = offsetOf(detail::oid(Id));
+            m_buf[off] = detail::oid(Id);
+            for (uint8_t i = 0; i < Typed<Id>::kWidth; ++i)
+            {
+                m_buf[off + 1 + i] = t.data[i];
+            }
+        }
     };
 
 } // namespace BTHome

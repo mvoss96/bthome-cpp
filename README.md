@@ -114,39 +114,41 @@ Result format:
 ## Fixed object sets
 
 A sensor node usually sends the same objects every cycle and only varies the
-values. `BTHome::StaticPacket` takes the object set as template arguments, so
-the layout is decided at compile time - no insertion sort, no `memmove`, no
-offset table, and a buffer sized to the objects rather than to a worst case.
+values. `BTHome::StaticPacket` takes them as constructor arguments, and since
+the factories return a type that carries the object id, the layout is deduced:
 
 ```cpp
-BTHome::StaticPacket<BTHome::ObjectId::PacketId,
-                     BTHome::ObjectId::Temperature,
-                     BTHome::ObjectId::Humidity,
-                     BTHome::ObjectId::Battery> packet;
-
-packet.put<BTHome::ObjectId::Temperature>(BTHome::temperature(22.4f));
-packet.put<BTHome::ObjectId::Humidity>(BTHome::humidity(54.3f));
-packet.put<BTHome::ObjectId::Battery>(BTHome::battery(92));
+BTHome::StaticPacket packet(BTHome::packet_id(7),
+                            BTHome::temperature(22.4f),
+                            BTHome::humidity(54.3f),
+                            BTHome::battery(92));
 ```
 
-The ids may be listed in any order — objects are placed in ascending id order
-the way BTHome requires. The emitted bytes are identical to `Packet`'s, and
+No template arguments, no per-object setter, and each id is written once — in
+the factory, where it belongs. Pairing a value with the wrong id is not a
+runtime check but impossible to express.
+
+The arguments may be in any order; objects are placed in ascending id order the
+way BTHome requires. The emitted bytes are identical to `Packet`'s, and
 `build_advertising()` takes either type. On an ATmega328P, for the four objects
 above:
 
 | | Flash | Packet object |
 |---|---|---|
 | `Packet<31>` | 2576 B | 52 B |
-| `StaticPacket<…>` | 1714 B | 15 B |
+| `StaticPacket<…>` | 1776 B | 15 B |
 
-`put()` returns `false` when the measurement's object id does not match the
-slot, which would otherwise write one object's bytes into another's.
+A `StaticPacket` always transmits its whole set — the layout is fixed, so an
+object cannot be left out. A value the factories could not encode (they drop
+NaN and the infinities) therefore goes on the air as zero rather than being
+omitted; use `Packet` where a sensor can be unavailable.
 
 `StaticPacket` is an addition, not a replacement. Use `Packet` when the object
 set varies between packets, for `Text`/`Raw`/command events (their length is
 not a compile-time property), for several objects with the same id such as
 button padding, and for encrypted packets. Each of those is a `static_assert`
-with a message naming the reason, not a silent misencode.
+naming the reason, not a silent misencode.
+
 
 ## Decoding
 
