@@ -14,6 +14,7 @@ Dependency-free C++17 BTHome v2 payload builder.
 2. Full raw advertising payload (Flags + BTHome service data) via `BTHome::build_advertising(...)`.
 3. All BTHome v2 object types, including variable-length Text (0x53) and Raw (0x54) via `BTHome::text(...)` / `BTHome::raw(...)`.
 4. AES-CCM encrypted payloads via `BTHome::EncryptedPacket<Capacity>` + `BTHome::build_encrypted_advertising(...)` with a pluggable cipher backend.
+5. Parsing service data back into typed objects via `BTHome::Decoder` — for receivers on transports without a BLE stack (ESP-NOW, nRF24, serial links).
 
 ## Install
 
@@ -109,6 +110,40 @@ Result format:
 
 `[Flags AD][BTHome Service Data AD][optional Local Name AD]`
 
+## Decoding
+
+`BTHome::Decoder` iterates the objects of one service-data buffer in place
+(no heap, no callbacks) — the inverse of `Packet`, sharing the same
+width/scaling tables so encode and decode cannot drift apart:
+
+```cpp
+BTHome::Decoder dec(service_data, len); // [uuid lo][uuid hi][info][objects...]
+
+BTHome::Decoded obj;
+while (dec.next(obj))
+{
+    // is() compares against the object id enums - no hex literals, no casts.
+    if (obj.is(BTHome::SensorObjectId::Temperature)) { publish(obj.value); }
+    else if (obj.is(BTHome::BinaryObjectId::Motion)) { publish(obj.on()); }
+    else if (obj.is(BTHome::EventObjectId::DimmerEvent)) { publish(obj.event(), obj.steps()); }
+}
+
+if (dec.status() != BTHome::DecodeStatus::End)
+{
+    // Ended early. status() says why, and the cases want different reactions:
+    //   BadHeader  not a BTHome service-data buffer
+    //   Encrypted  decrypt first, then decode the plaintext
+    //   Truncated  the transport lost bytes
+    //   UnknownId  sender uses an object this version does not know;
+    //              obj.object_id names it
+}
+```
+
+Object widths, scaling and family all come from the same `object_layout()`
+table the factories encode with, so the two directions cannot drift apart.
+An unknown object id ends the pass rather than being skipped - BTHome objects
+carry no length, so where an unknown one ends is not knowable.
+
 ## Encryption (AES-CCM)
 
 The library implements the BTHome v2 encryption scheme (nonce construction,
@@ -181,10 +216,12 @@ pip install bthome-ble
 
 - Arduino AVR, payload building without a BLE stack: `examples/arduino_avr/arduino_avr.ino`
 - Arduino NimBLE: `examples/arduino_nimble/arduino_nimble.ino`
+- Arduino NimBLE receiving, the counterpart of the above: `examples/arduino_nimble_scan/arduino_nimble_scan.ino`
 - Arduino NimBLE encrypted (MAC + Preferences counter): `examples/arduino_nimble_encrypted/arduino_nimble_encrypted.ino`
 - ESP-IDF: `examples/esp_idf/main/main.cpp`
 - ESP-IDF encrypted (MAC + NVS counter persistence): `examples/esp_idf_encrypted/main/main.cpp`
 - Generic C++: `examples/generic/main.cpp`
+- Generic C++ decoding, the counterpart of the above: `examples/generic_decode/main.cpp`
 - Generic encrypted (prints the official spec vector): `examples/generic_encrypted/main.cpp`
 - Zephyr: `examples/zephyr/src/main.cpp`
 - Zephyr encrypted (PSA Crypto backend, MAC byte-order handling): `examples/zephyr_encrypted/src/main.cpp`

@@ -1,4 +1,4 @@
-// bthome.h - facade header for BTHome v2 payload generation
+// bthome.h - facade header for BTHome v2 payload generation and parsing
 // Reference: https://bthome.io/format/
 #pragma once
 
@@ -10,6 +10,9 @@
 //    BTHome::build_encrypted_advertising(...). The cipher itself is pluggable
 //    (BTHome::Encryptor); include bthome_crypto_mbedtls.h separately for a
 //    ready-made mbedtls backend (not part of this facade - it needs mbedtls).
+// And parse:
+// 4) BTHome service data back into typed objects, via BTHome::Decoder -
+//    for receivers on transports without a BLE stack (ESP-NOW, nRF24, ...).
 
 #include "bthome_defs.h"
 #include "bthome_objects.h"
@@ -18,3 +21,4 @@
 #include "bthome_packet.h"
 #include "bthome_advertising.h"
 #include "bthome_encryption.h"
+#include "bthome_decode.h"
