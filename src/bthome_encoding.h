@@ -1,5 +1,6 @@
 #pragma once
 
+#include <float.h>
 #include <stdint.h>
 
 #include "bthome_defs.h"
@@ -99,21 +100,50 @@ namespace BTHome
             constexpr ObjectLayout l = object_layout(byte_id);
             static_assert(l.scaled, "make_sensor() is for float-scaled objects only");
 
+            // Representable raw range for this object - both bounds follow
+            // from the table, so they are compile-time constants.
+            constexpr int64_t max_v = l.is_signed ? (int64_t{1} << (8 * l.width - 1)) - 1
+                                                  : (int64_t{1} << (8 * l.width)) - 1;
+            constexpr int64_t min_v = l.is_signed ? -(int64_t{1} << (8 * l.width - 1))
+                                                  : 0;
+
             Measurement m;
             m.object_id = byte_id;
             m.len = l.width;
 
-            // Scale to raw integer units and round half away from zero.
-            const float units = value / l.factor;
-            int64_t raw = static_cast<int64_t>(units >= 0.0f ? units + 0.5f : units - 0.5f);
-
-            // Clamp to the representable range for the selected width/sign.
-            // if constexpr: the sign is known from the table, so the branch
-            // that does not apply is never instantiated.
-            if constexpr (l.is_signed)
+            // NaN and the infinities have no BTHome representation. Encoding
+            // them would emit an extreme that looks like a real reading, so
+            // drop the object instead: a missing object means "no value this
+            // cycle", which is exactly what an unavailable sensor is.
+            // Packet::add() rejects a zero-length Measurement, so the caller
+            // gets a false back rather than a silently mangled packet.
+            // (A comparison rather than isfinite(): no <math.h> needed, and it
+            // is false for NaN and for both infinities. Note that -ffast-math
+            // permits the compiler to assume no NaNs and drop this check.)
+            if (!(value >= -FLT_MAX && value <= FLT_MAX))
             {
-                const int64_t max_v = (int64_t{1} << (8 * l.width - 1)) - 1;
-                const int64_t min_v = -(int64_t{1} << (8 * l.width - 1));
+                m.len = 0;
+                return m;
+            }
+
+            // Scale to raw units, clamping in float space: converting an
+            // out-of-range float to int64_t is undefined behaviour, and
+            // value / factor leaves int64 range entirely for the 1e-6 factors.
+            const float units = value / l.factor;
+            int64_t raw;
+            if (units <= static_cast<float>(min_v))
+            {
+                raw = min_v;
+            }
+            else if (units >= static_cast<float>(max_v))
+            {
+                raw = max_v;
+            }
+            else
+            {
+                // Round half away from zero; rounding can still push the value
+                // one past the edge, so clamp again.
+                raw = static_cast<int64_t>(units >= 0.0f ? units + 0.5f : units - 0.5f);
                 if (raw > max_v)
                 {
                     raw = max_v;
@@ -121,20 +151,6 @@ namespace BTHome
                 if (raw < min_v)
                 {
                     raw = min_v;
-                }
-            }
-            else
-            {
-                if (raw < 0)
-                {
-                    raw = 0;
-                }
-                const uint64_t umax =
-                    (l.width >= 8) ? ~uint64_t{0}
-                                   : ((uint64_t{1} << (8 * l.width)) - 1);
-                if (static_cast<uint64_t>(raw) > umax)
-                {
-                    raw = static_cast<int64_t>(umax);
                 }
             }
 

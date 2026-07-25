@@ -4,6 +4,8 @@
 #include "bthome.h"
 #include "test_utils.h"
 
+#include <math.h>
+
 static void test_header_and_basic_packet()
 {
     // Tests: Empty packet without measurements.
@@ -686,6 +688,65 @@ static void test_events()
     }
 }
 
+static void test_non_finite_values()
+{
+    // Tests: NaN and the infinities are dropped, not encoded.
+    // Expects: len 0 - BTHome has no representation for "no value", and a
+    //          clamped extreme would look like a real reading to a receiver.
+    {
+        expect_true("NaN dropped (signed)", BTHome::temperature(NAN).len == 0);
+        expect_true("+inf dropped", BTHome::temperature(INFINITY).len == 0);
+        expect_true("-inf dropped", BTHome::temperature(-INFINITY).len == 0);
+        expect_true("NaN dropped (unsigned)", BTHome::humidity(NAN).len == 0);
+    }
+
+    // Tests: finite values far outside the object range still clamp.
+    // Expects: the documented extreme, and not the opposite one - converting an
+    //          out-of-range float to int64_t is undefined, which used to turn
+    //          huge positives into the minimum.
+    {
+        const BTHome::Measurement hi = BTHome::energy(1e30f);        // uint24 x0.001
+        const BTHome::Measurement pos = BTHome::temperature(1e30f);  // sint16 x0.01
+        const BTHome::Measurement neg = BTHome::temperature(-1e30f);
+        expect_true("huge unsigned clamps to max",
+                    hi.len == 3 && hi.data[0] == 0xFF && hi.data[1] == 0xFF && hi.data[2] == 0xFF);
+        expect_true("huge positive clamps to max",
+                    pos.len == 2 && pos.data[0] == 0xFF && pos.data[1] == 0x7F);
+        expect_true("huge negative clamps to min",
+                    neg.len == 2 && neg.data[0] == 0x00 && neg.data[1] == 0x80);
+    }
+
+    // Tests: Packet::add() refuses a zero-length Measurement.
+    // Expects: false, and the packet unchanged - serializing a bare object id
+    //          would make every receiver read the next object's bytes as this
+    //          object's value and discard the whole advertisement.
+    {
+        BTHome::Packet<31> p;
+        p.add(BTHome::packet_id(1));
+        const size_t before = p.serviceDataSize();
+
+        BTHome::Measurement empty;
+        empty.object_id = static_cast<uint8_t>(BTHome::SensorObjectId::Temperature);
+        empty.len = 0;
+        expect_true("zero-length measurement rejected", !p.add(empty));
+        expect_true("zero-length measurement leaves packet untouched",
+                    p.serviceDataSize() == before);
+    }
+
+    // Tests: a dropped NaN reading does not corrupt the objects around it.
+    // Expects: exactly packet id + humidity, with no stray 0x02 byte.
+    {
+        BTHome::Packet<31> p;
+        p.add(BTHome::packet_id(1));
+        expect_true("NaN reading not added", !p.add(BTHome::temperature(NAN)));
+        p.add(BTHome::humidity(50.0f));
+
+        const uint8_t want_sd[] = {0xD2, 0xFC, 0x40, 0x00, 0x01, 0x03, 0x88, 0x13};
+        expect_bytes("NaN reading leaves a clean packet",
+                     p.serviceData(), p.serviceDataSize(), want_sd, sizeof(want_sd));
+    }
+}
+
 int main()
 {
     test_header_and_basic_packet();
@@ -702,6 +763,7 @@ int main()
     test_accessor_idempotence();
     test_text_and_raw();
     test_events();
+    test_non_finite_values();
 
     return test_summary();
 }

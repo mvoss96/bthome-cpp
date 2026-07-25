@@ -45,11 +45,20 @@ public:
     /**
      * @brief Adds one measurement to the packet.
      * @param m Measurement to insert.
-     * @return true if the measurement was inserted, false if capacity would be exceeded.
+     * @return true if the measurement was inserted, false if capacity would be
+     *         exceeded or the measurement carries no value bytes.
+     * @note A zero-length Measurement is rejected rather than serialized.
+     *       Fixed-width objects always carry at least one value byte, so len 0
+     *       means the value could not be encoded - the factories return it for
+     *       NaN and infinity. Writing it would emit a bare object id, and every
+     *       receiver would then read the following object's bytes as this
+     *       object's value and discard the whole advertisement. (Empty Text and
+     *       Raw are legitimate and go through the VarMeasurement overload,
+     *       which serializes an explicit length byte.)
      */
     bool add(const BTHome::Measurement &m)
     {
-        if (m.len > sizeof(m.data))
+        if (m.len == 0 || m.len > sizeof(m.data))
         {
             return false;
         }
