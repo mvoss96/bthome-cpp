@@ -36,7 +36,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        example: [arduino_nimble, arduino_nimble_scan, arduino_nimble_encrypted]
+        example: [arduino_nimble, arduino_nimble_scan, arduino_nimble_encrypted, arduino_nimble_encrypted_scan]
     env:
       ESP32_INDEX: https://espressif.github.io/arduino-esp32/package_esp32_index.json
     steps:

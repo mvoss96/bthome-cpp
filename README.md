@@ -256,6 +256,7 @@ pip install bthome-ble
 - Arduino NimBLE: `examples/arduino_nimble/arduino_nimble.ino`
 - Arduino NimBLE receiving, the counterpart of the above: `examples/arduino_nimble_scan/arduino_nimble_scan.ino`
 - Arduino NimBLE encrypted (MAC + Preferences counter): `examples/arduino_nimble_encrypted/arduino_nimble_encrypted.ino`
+- Arduino NimBLE encrypted receiving, the counterpart of the above: `examples/arduino_nimble_encrypted_scan/arduino_nimble_encrypted_scan.ino`
 - ESP-IDF: `examples/esp_idf/main/main.cpp`
 - ESP-IDF encrypted (MAC + NVS counter persistence): `examples/esp_idf_encrypted/main/main.cpp`
 - Generic C++: `examples/generic/main.cpp`
