@@ -52,6 +52,19 @@ jobs:
           JSON=$(python3 -c "import json; print(json.load(open('library.json'))['version'])")
           echo "library.properties=$PROPS library.json=$JSON"
           test "$PROPS" = "$JSON"
+      - name: README install snippets must point at the current minor series
+        # `^0.3.0` resolves to >=0.3.0 <0.4.0, so a stale caret hands new users
+        # a release without the APIs the same README documents. Compared on
+        # major.minor, which is what the caret actually selects - patch
+        # releases need no README edit.
+        run: |
+          SERIES=$(grep '^version=' library.properties | cut -d= -f2 | cut -d. -f1,2)
+          CARET=$(grep -oE 'bthome-cpp@\^[0-9]+\.[0-9]+' README.md | head -1 | sed 's/.*@\^//')
+          TAG=$(grep -oE 'bthome-cpp\.git#v[0-9]+\.[0-9]+' README.md | head -1 | sed 's/.*#v//')
+          echo "library.properties=$SERIES README caret=$CARET README tag=$TAG"
+          test -n "$CARET" && test -n "$TAG"
+          test "$CARET" = "$SERIES"
+          test "$TAG" = "$SERIES"
 
   interop:
     # Independent oracle: every advertisement this library builds is decoded

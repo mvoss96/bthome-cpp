@@ -171,7 +171,11 @@ namespace BTHome
     inline Measurement gas_detected(bool on) { return detail::b<ObjectId::GasDetected>(on); }
     inline Measurement heat(bool on) { return detail::b<ObjectId::Heat>(on); }
     inline Measurement light(bool on) { return detail::b<ObjectId::Light>(on); }
-    inline Measurement lock(bool locked) { return detail::b<ObjectId::Lock>(locked); }
+    // 0x1F is the one binary object whose true state reads negative: the spec
+    // defines it as "0 = Locked, 1 = Unlocked", and receivers pass it straight
+    // to Home Assistant's lock device class, where on means open. Hence the
+    // parameter name - lock(true) reports an *open* lock.
+    inline Measurement lock(bool unlocked) { return detail::b<ObjectId::Lock>(unlocked); }
     inline Measurement moisture_detected(bool on) { return detail::b<ObjectId::MoistureDetected>(on); }
     inline Measurement motion(bool on) { return detail::b<ObjectId::Motion>(on); }
     inline Measurement moving(bool on) { return detail::b<ObjectId::Moving>(on); }
