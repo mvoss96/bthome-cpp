@@ -45,7 +45,7 @@ namespace BTHome
             return ObjectLayout{ObjectKind::Sensor, width, 1.0f, is_signed, false, false};
         }
 
-        constexpr ObjectLayout fixed(ObjectKind kind, uint8_t width)
+        constexpr ObjectLayout fixed_width(ObjectKind kind, uint8_t width)
         {
             return ObjectLayout{kind, width, 1.0f, false, false, false};
         }
@@ -81,7 +81,7 @@ namespace BTHome
             switch (id)
             {
             // Misc data
-            case oid(MiscObjectId::PacketId):            return fixed(ObjectKind::PacketId, 1);
+            case oid(MiscObjectId::PacketId):            return fixed_width(ObjectKind::PacketId, 1);
 
             // Sensor data - in object-id order, one line per object, so the table
             // can be read straight against https://bthome.io/format/
@@ -175,19 +175,19 @@ namespace BTHome
             case oid(BinaryObjectId::Tamper):
             case oid(BinaryObjectId::Vibration):
             case oid(BinaryObjectId::Window):
-                return fixed(ObjectKind::Binary, 1);
+                return fixed_width(ObjectKind::Binary, 1);
 
             // Events. The command event carries [argument count][opcode][args],
             // so its length depends on its own payload; the dimmer object is
             // fixed at [event][steps] (see dimmer_event()).
-            case oid(EventObjectId::ButtonEvent):        return fixed(ObjectKind::ButtonEvent, 1);  // 0x3A  uint8
+            case oid(EventObjectId::ButtonEvent):        return fixed_width(ObjectKind::ButtonEvent, 1);  // 0x3A  uint8
             case oid(EventObjectId::CommandEvent):       return variable_length(ObjectKind::CommandEvent);  // 0x3B  [argc][opcode][args...]
-            case oid(EventObjectId::DimmerEvent):        return fixed(ObjectKind::DimmerEvent, 2);  // 0x3C  [event][steps]
+            case oid(EventObjectId::DimmerEvent):        return fixed_width(ObjectKind::DimmerEvent, 2);  // 0x3C  [event][steps]
 
             // Device information
-            case oid(DeviceObjectId::DeviceTypeId):      return fixed(ObjectKind::DeviceTypeId, 2);  // 0xF0  uint16
-            case oid(DeviceObjectId::FirmwareVersionU32): return fixed(ObjectKind::FirmwareVersion, 4);  // 0xF1  uint32
-            case oid(DeviceObjectId::FirmwareVersionU24): return fixed(ObjectKind::FirmwareVersion, 3);  // 0xF2  uint24
+            case oid(DeviceObjectId::DeviceTypeId):      return fixed_width(ObjectKind::DeviceTypeId, 2);  // 0xF0  uint16
+            case oid(DeviceObjectId::FirmwareVersionU32): return fixed_width(ObjectKind::FirmwareVersion, 4);  // 0xF1  uint32
+            case oid(DeviceObjectId::FirmwareVersionU24): return fixed_width(ObjectKind::FirmwareVersion, 3);  // 0xF2  uint24
 
             default:
                 return ObjectLayout{};

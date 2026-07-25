@@ -14,7 +14,9 @@ namespace BTHome
          * @brief Encode an unsigned raw integer into a Measurement payload.
          * @param id Object ID byte.
          * @param raw Unsigned raw value.
-         * @param width Number of payload bytes.
+         * @param width Number of payload bytes, at least 1. The only callers
+         *        are u() and s(), which take the width from object_layout()
+         *        and static_assert that it is non-zero.
          * @return Encoded Measurement with little-endian value bytes.
          */
         inline Measurement make_u(uint8_t id, uint64_t raw,
@@ -23,10 +25,6 @@ namespace BTHome
             Measurement m;
             m.object_id = id;
             m.len = width;
-            if (width == 0)
-            {
-                return m; // unknown object id - nothing to encode
-            }
 
             const uint64_t umax =
                 (width >= 8) ? ~uint64_t{0}
@@ -48,7 +46,7 @@ namespace BTHome
          * @brief Encode a signed raw integer into a Measurement payload.
          * @param id Object ID byte.
          * @param raw Signed raw value.
-         * @param width Number of payload bytes.
+         * @param width Number of payload bytes, at least 1 (see make_u()).
          * @return Encoded Measurement with little-endian value bytes.
          */
         inline Measurement make_s(uint8_t id, int64_t raw,
@@ -57,10 +55,6 @@ namespace BTHome
             Measurement m;
             m.object_id = id;
             m.len = width;
-            if (width == 0)
-            {
-                return m; // unknown object id - nothing to encode
-            }
 
             const int64_t max_v = (int64_t{1} << (8 * width - 1)) - 1;
             const int64_t min_v = -(int64_t{1} << (8 * width - 1));
@@ -114,7 +108,9 @@ namespace BTHome
             int64_t raw = static_cast<int64_t>(units >= 0.0f ? units + 0.5f : units - 0.5f);
 
             // Clamp to the representable range for the selected width/sign.
-            if (l.is_signed)
+            // if constexpr: the sign is known from the table, so the branch
+            // that does not apply is never instantiated.
+            if constexpr (l.is_signed)
             {
                 const int64_t max_v = (int64_t{1} << (8 * l.width - 1)) - 1;
                 const int64_t min_v = -(int64_t{1} << (8 * l.width - 1));

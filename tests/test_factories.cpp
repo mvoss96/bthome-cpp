@@ -230,6 +230,28 @@ int main()
         check_layout(c);
     }
 
+    // Text (0x53) and Raw (0x54) are VarMeasurement and so have no Case entry
+    // above - their serialization is covered in test_bthome. Check their table
+    // rows directly, so that no layout row is left unverified.
+    const struct
+    {
+        uint8_t id;
+        BTHome::ObjectKind kind;
+    } var_cases[] = {
+        {0x53, BTHome::ObjectKind::Text},
+        {0x54, BTHome::ObjectKind::Raw},
+    };
+    for (const auto &v : var_cases)
+    {
+        const BTHome::detail::ObjectLayout l = BTHome::detail::object_layout(v.id);
+        const bool ok = l.kind == v.kind && l.variable && l.width == 0 && !l.scaled;
+        printf("[%s] layout variable-length %02X\n", ok ? "PASS" : "FAIL", v.id);
+        if (!ok)
+        {
+            ++g_failures;
+        }
+    }
+
     // ...and no entry for ids the spec has not assigned.
     const uint8_t unassigned[] = {0x30, 0x39, 0x66, 0xE7, 0xFF};
     for (uint8_t id : unassigned)
