@@ -8,9 +8,20 @@
 
 // Decoder for BTHome v2 service data — the inverse of Packet/factories.
 // Header-only, no heap, no exceptions; iterates the objects of one
-// service-data buffer in place. Written for receivers that get BTHome
-// payloads over transports without a BLE stack (ESP-NOW, nRF24, serial),
-// but works on any raw service-data bytes.
+// service-data buffer in place. It works on BTHome bytes from any source:
+// a BLE scan on an ESP32, or a transport with no BLE stack at all
+// (ESP-NOW, nRF24 broadcasts, serial links).
+//
+// Two entry points, because BLE stacks disagree on where service data
+// starts. Both are the same bytes, only cut differently:
+//
+//   Decoder(sd, len)              [uuid lo][uuid hi][info][objects...]
+//     Packet::serviceData(), esp_ble_resolve_adv_data() for AD type 0x16,
+//     and anything an ESP-NOW or nRF24 sender forwards verbatim.
+//
+//   Decoder::fromPayload(p, len)  [info][objects...]
+//     NimBLE's getServiceData(): you asked for the data by UUID, so it
+//     returns what follows the UUID and there is nothing left to check.
 //
 // Widths, scaling, signedness and object family all come from
 // detail::object_layout() - the same table the factories encode with - so
@@ -76,27 +87,32 @@ namespace BTHome
 
     class Decoder
     {
-    public:
-        // service_data: [uuid lo][uuid hi][device info][objects...] — exactly
-        // what Packet::serviceData() emits and BLE service data carries.
-        Decoder(const uint8_t *service_data, size_t len)
-            : m_data(service_data), m_len(len), m_pos(3), m_info(0),
-              m_status(DecodeStatus::BadHeader)
-        {
-            const bool header_ok =
-                (service_data != nullptr) && (len >= 3) &&
-                (service_data[0] == static_cast<uint8_t>(kServiceUuid & 0xFFu)) &&
-                (service_data[1] == static_cast<uint8_t>(kServiceUuid >> 8));
-            if (!header_ok)
-            {
-                return; // stays BadHeader
-            }
+        static constexpr size_t kUuidBytes = 2; // the 16-bit service UUID
 
-            m_info = service_data[2];
-            // Encrypted payloads carry ciphertext objects, so refuse to
-            // iterate them right away. Decrypt first, then feed the plaintext
-            // to a new Decoder (see bthome_encryption.h for the layout).
-            m_status = encrypted() ? DecodeStatus::Encrypted : DecodeStatus::Ok;
+    public:
+        /**
+         * @brief Decodes BTHome service data as BLE carries it.
+         * @param service_data [uuid lo][uuid hi][device info][objects...].
+         *        The service UUID is verified; a mismatch is BadHeader.
+         * @param len Number of bytes in @p service_data.
+         */
+        Decoder(const uint8_t *service_data, size_t len)
+            : Decoder(service_data, len, kUuidBytes)
+        {
+        }
+
+        /**
+         * @brief Decodes service data whose UUID the BLE stack already
+         *        matched and stripped.
+         * @param payload [device info][objects...]. NimBLE's
+         *        getServiceData() returns this shape - the data was looked up
+         *        by UUID, so the UUID is not repeated and there is nothing
+         *        left for the decoder to verify.
+         * @param len Number of bytes in @p payload.
+         */
+        static Decoder fromPayload(const uint8_t *payload, size_t len)
+        {
+            return Decoder(payload, len, 0);
         }
 
         // Header information, readable even when the payload cannot be
@@ -188,6 +204,31 @@ namespace BTHome
         }
 
     private:
+        // Shared by both entry points. uuid_bytes is 2 when the buffer still
+        // carries the service UUID and 0 when the caller's BLE stack already
+        // matched and removed it.
+        Decoder(const uint8_t *data, size_t len, size_t uuid_bytes)
+            : m_data(data), m_len(len), m_pos(uuid_bytes + 1), m_info(0),
+              m_status(DecodeStatus::BadHeader)
+        {
+            if (data == nullptr || len < uuid_bytes + 1)
+            {
+                return; // stays BadHeader
+            }
+            if (uuid_bytes != 0 &&
+                (data[0] != static_cast<uint8_t>(kServiceUuid & 0xFFu) ||
+                 data[1] != static_cast<uint8_t>(kServiceUuid >> 8)))
+            {
+                return; // not BTHome service data
+            }
+
+            m_info = data[uuid_bytes];
+            // Encrypted payloads carry ciphertext objects, so refuse to
+            // iterate them right away. Decrypt first, then feed the plaintext
+            // to a new Decoder (see bthome_encryption.h for the layout).
+            m_status = encrypted() ? DecodeStatus::Encrypted : DecodeStatus::Ok;
+        }
+
         bool fail(DecodeStatus reason)
         {
             m_status = reason;

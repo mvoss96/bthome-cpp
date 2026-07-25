@@ -25,6 +25,7 @@ jobs:
       - name: Build host examples
         run: |
           ${{ matrix.compiler }} -std=c++17 -fno-exceptions -fno-rtti -Wall -Wextra -Werror -I src examples/generic/main.cpp -o build/demo_generic
+          ${{ matrix.compiler }} -std=c++17 -fno-exceptions -fno-rtti -Wall -Wextra -Werror -I src examples/generic_decode/main.cpp -o build/demo_decode
           ${{ matrix.compiler }} -std=c++17 -fno-exceptions -fno-rtti -Wall -Wextra -Werror -I src examples/generic_encrypted/main.cpp -lmbedcrypto -o build/demo_encrypted
       - name: Run tests
         run: |
@@ -32,6 +33,7 @@ jobs:
           ./build/test_factories
           ./build/test_decode
           ./build/test_encryption
+          ./build/demo_decode
           ./build/demo_encrypted
 
   manifests:

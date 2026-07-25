@@ -235,6 +235,47 @@ static void test_wide_and_remaining_kinds()
                 fw != nullptr && fw->kind == BTHome::ObjectKind::FirmwareVersion && fw->raw == 0x01020304u);
 }
 
+static void test_payload_entry_point()
+{
+    BTHome::Packet<31> p;
+    p.add(BTHome::packet_id(3));
+    p.add(BTHome::temperature(19.5f));
+
+    // What a BLE stack that matched the UUID itself hands over: the same
+    // bytes, minus the two UUID bytes (NimBLE's getServiceData()).
+    const uint8_t *payload = p.serviceData() + 2;
+    const size_t payload_len = p.serviceDataSize() - 2;
+
+    BTHome::Decoder dec = BTHome::Decoder::fromPayload(payload, payload_len);
+    expect_true("payload: header still readable", dec.version() == 2 && !dec.encrypted());
+
+    BTHome::Decoded got[4];
+    BTHome::Decoded one;
+    size_t n = 0;
+    while (n < 4 && dec.next(one))
+    {
+        got[n++] = one;
+    }
+    expect_true("payload: same objects as the full buffer",
+                n == 2 && got[0].raw == 3 && near(got[1].value, 19.5f, 0.005f));
+    expect_true("payload: clean end", dec.status() == BTHome::DecodeStatus::End);
+
+    BTHome::Decoder tooShort = BTHome::Decoder::fromPayload(payload, 0);
+    expect_true("payload: empty buffer rejected",
+                tooShort.status() == BTHome::DecodeStatus::BadHeader);
+
+    const uint8_t enc[] = {0x41, 0x00, 0x05};
+    BTHome::Decoder encrypted = BTHome::Decoder::fromPayload(enc, sizeof(enc));
+    expect_true("payload: encrypted flag honoured",
+                encrypted.encrypted() && encrypted.status() == BTHome::DecodeStatus::Encrypted);
+
+    // Feeding a UUID-less payload to the service-data constructor is the
+    // mistake this entry point exists to prevent - it must not parse.
+    BTHome::Decoder mismatched(payload, payload_len);
+    expect_true("payload: uuid-less buffer rejected by the other entry point",
+                mismatched.status() == BTHome::DecodeStatus::BadHeader);
+}
+
 static void test_malformed()
 {
     BTHome::Packet<31> p;
@@ -290,6 +331,7 @@ int main()
     test_device_objects_and_text();
     test_signed_widths();
     test_wide_and_remaining_kinds();
+    test_payload_entry_point();
     test_malformed();
     return test_summary();
 }

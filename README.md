@@ -221,10 +221,12 @@ pip install bthome-ble
 
 - Arduino AVR, payload building without a BLE stack: `examples/arduino_avr/arduino_avr.ino`
 - Arduino NimBLE: `examples/arduino_nimble/arduino_nimble.ino`
+- Arduino NimBLE receiving, the counterpart of the above: `examples/arduino_nimble_scan/arduino_nimble_scan.ino`
 - Arduino NimBLE encrypted (MAC + Preferences counter): `examples/arduino_nimble_encrypted/arduino_nimble_encrypted.ino`
 - ESP-IDF: `examples/esp_idf/main/main.cpp`
 - ESP-IDF encrypted (MAC + NVS counter persistence): `examples/esp_idf_encrypted/main/main.cpp`
 - Generic C++: `examples/generic/main.cpp`
+- Generic C++ decoding, the counterpart of the above: `examples/generic_decode/main.cpp`
 - Generic encrypted (prints the official spec vector): `examples/generic_encrypted/main.cpp`
 - Zephyr: `examples/zephyr/src/main.cpp`
 - Zephyr encrypted (PSA Crypto backend, MAC byte-order handling): `examples/zephyr_encrypted/src/main.cpp`
