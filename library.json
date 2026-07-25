@@ -1,6 +1,6 @@
 {
   "name": "bthome-cpp",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Dependency-free C++17 BTHome v2 payload builder and parser. No heap, no exceptions, no RTTI. Sensors, binary sensors, events, text/raw, AES-CCM encryption and decryption with pluggable crypto backends (mbedtls and PSA adapters included). Decodes advertisements from any source - a BLE scan or a transport without a BLE stack. Pair with any BLE stack.",
   "homepage": "https://github.com/mvoss96/bthome-cpp",
   "repository": {
