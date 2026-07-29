@@ -13,7 +13,7 @@ Dependency-free C++17 BTHome v2 payload builder and parser.
 1. BTHome service-data AD element via `BTHome::Packet<Capacity>`.
 2. Full raw advertising payload (Flags + BTHome service data) via `BTHome::build_advertising(...)`.
 3. All BTHome v2 object types, including variable-length Text (0x53) and Raw (0x54) via `BTHome::text(...)` / `BTHome::raw(...)`.
-4. AES-CCM encrypted payloads via `BTHome::EncryptedPacket<Capacity>` + `BTHome::build_encrypted_advertising(...)` with a pluggable cipher backend.
+4. AES-CCM encrypted payloads via `BTHome::EncryptedPacket<Capacity>` + `BTHome::build_encrypted_advertising(...)` (or `BTHome::build_encrypted_service_data(...)` off BLE) with a pluggable cipher backend.
 5. Parsing service data back into typed objects via `BTHome::Decoder` — for receivers on transports without a BLE stack (ESP-NOW, nRF24, serial links).
 
 ## Install
@@ -184,6 +184,30 @@ successful build, so CCM nonce reuse is structurally impossible. It must
 survive reboots: persist `encryptor.counter()` periodically and restore it
 with a safety margin via `setCounter()` — receivers reject non-increasing
 counters as replays. Encryption costs 8 bytes of advertisement budget.
+
+#### Encrypting for something other than BLE advertising
+
+`build_encrypted_service_data()` writes the service-data value on its own —
+`[uuid lo][uuid hi][device-info][ciphertext][counter][MIC]` — without the Flags
+AD and the AD length/type pair. It is the encrypting counterpart of
+`Packet::serviceData()`, and exactly what `Decryptor::decryptServiceData()`
+consumes:
+
+```cpp
+uint8_t sd[26];
+const int n = BTHome::build_encrypted_service_data(packet, encryptor, sd, sizeof(sd));
+if (n > 0) { my_transport_send(sd, n); }   // raw radio, serial framing, MQTT …
+```
+
+Use it wherever BTHome is carried by something that is not BLE advertising: a
+raw nRF24 or LoRa link, a serial protocol, an MQTT payload. Building a whole
+advertisement only to skip its first five bytes works, but wastes the buffer and
+is easy to get wrong by one — this library's own tests did exactly that until the
+function existed.
+
+`build_encrypted_advertising()` is now a thin wrapper around it, so a nonce is
+built and a counter consumed in exactly one place and the two cannot disagree
+about a byte.
 
 ### Decryption
 

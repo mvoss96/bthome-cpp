@@ -139,6 +139,35 @@ int build_encrypted_advertising(const EncryptedPacket<AdvCapacity> &packet,
                                 bool complete_local_name = true);
 
 /**
+ * @brief Build an encrypted BTHome service-data value, without the AD wrapper.
+ *
+ * The encrypting counterpart of Packet::serviceData(), and the exact input
+ * Decryptor::decryptServiceData() consumes:
+ * [uuid lo][uuid hi][device-info][ciphertext][counter][MIC].
+ *
+ * Use this on any transport that carries BTHome service data without being BLE
+ * advertising - a raw radio link, a serial framing, an MQTT payload. Those
+ * transports have no Flags AD and no AD length/type pair, and building a whole
+ * advertisement only to skip its first five bytes is both wasteful and easy to
+ * get wrong by one.
+ *
+ * On success the Encryptor's counter has been consumed and incremented.
+ *
+ * @tparam AdvCapacity Capacity parameter of the input EncryptedPacket.
+ * @param packet Source encrypted BTHome packet (plaintext measurements inside).
+ * @param encryptor Encryption material; counter is consumed on success.
+ * @param out Destination buffer for the service-data value.
+ * @param out_capacity Capacity of @p out in bytes.
+ * @return Service-data size in bytes on success, or -1 on error (no counter is
+ *         consumed on error).
+ */
+template <size_t AdvCapacity>
+int build_encrypted_service_data(const EncryptedPacket<AdvCapacity> &packet,
+                                 Encryptor &encryptor,
+                                 uint8_t *out,
+                                 size_t out_capacity);
+
+/**
  * @brief Holds the encryption material and produces BTHome v2 ciphertexts.
  *
  * The counter is owned and auto-incremented by this class: every successful
@@ -201,12 +230,14 @@ public:
     }
 
 private:
-    // Only build_encrypted_advertising drives the encryption; keeping this
+    // Only build_encrypted_service_data drives the encryption; keeping this
     // private keeps the multi-parameter call out of the public API.
+    // build_encrypted_advertising needs no access of its own - it wraps that
+    // function's output, so there is exactly one place where a nonce is built
+    // and a counter consumed.
     template <size_t AdvCapacity>
-    friend int build_encrypted_advertising(const EncryptedPacket<AdvCapacity> &,
-                                           Encryptor &, uint8_t *, size_t,
-                                           const char *, bool);
+    friend int build_encrypted_service_data(const EncryptedPacket<AdvCapacity> &,
+                                            Encryptor &, uint8_t *, size_t);
 
     /**
      * @brief Encrypts one BTHome measurement section and emits counter + MIC.
@@ -336,6 +367,47 @@ private:
 };
 
 template <size_t AdvCapacity>
+int build_encrypted_service_data(const EncryptedPacket<AdvCapacity> &packet,
+                                 Encryptor &encryptor,
+                                 uint8_t *out,
+                                 size_t out_capacity)
+{
+    // [uuid lo][uuid hi][device-info] - the AD element's header minus the
+    // [len][type] pair that belongs to advertising rather than to BTHome.
+    constexpr size_t kSdHeaderBytes = ServiceDataHeader::kByteCount - 2;
+    if (out == nullptr)
+    {
+        return -1;
+    }
+
+    const auto &inner = packet.inner();
+    const size_t sd_size = inner.serviceDataSize() + Encryptor::kOverheadBytes;
+    if (sd_size > out_capacity)
+    {
+        return -1;
+    }
+
+    const uint8_t *sd = inner.serviceData();
+    memcpy(out, sd, kSdHeaderBytes);
+
+    // The device-info byte goes into the nonce exactly as transmitted, encrypted
+    // bit included - EncryptedPacket has already set it.
+    const uint8_t device_info = sd[kSdHeaderBytes - 1];
+    const uint8_t *plaintext = sd + kSdHeaderBytes;
+    const size_t plain_len = inner.serviceDataSize() - kSdHeaderBytes;
+
+    uint8_t *ciphertext = out + kSdHeaderBytes;
+    uint8_t *counter_out = ciphertext + plain_len;
+    uint8_t *mic_out = counter_out + Encryptor::kCounterBytes;
+    if (!encryptor.encrypt(device_info, plaintext, plain_len, ciphertext, counter_out, mic_out))
+    {
+        return -1;
+    }
+
+    return static_cast<int>(sd_size);
+}
+
+template <size_t AdvCapacity>
 int build_encrypted_advertising(const EncryptedPacket<AdvCapacity> &packet,
                                 Encryptor &encryptor,
                                 uint8_t *out,
@@ -344,7 +416,6 @@ int build_encrypted_advertising(const EncryptedPacket<AdvCapacity> &packet,
                                 bool complete_local_name)
 {
     constexpr size_t kFlagsBytes = 3; // 02 01 06
-    constexpr size_t kHeaderBytes = ServiceDataHeader::kByteCount;
     if (out == nullptr)
     {
         return -1;
@@ -367,20 +438,15 @@ int build_encrypted_advertising(const EncryptedPacket<AdvCapacity> &packet,
     out[1] = 0x01; // AD type: Flags
     out[2] = 0x06; // Flags value: LE General Discoverable Mode, BR/EDR Not Supported
 
-    // Header is copied from the inner packet; only the AD length byte grows
-    // by the encryption overhead.
-    const auto &inner = packet.inner();
-    memcpy(out + kFlagsBytes, inner.data(), kHeaderBytes);
+    // The AD length/type pair, then the service data itself. Only the length
+    // byte differs from the inner packet's: it grows by the encryption overhead.
     out[kFlagsBytes] = static_cast<uint8_t>(ad_size - 1);
+    out[kFlagsBytes + 1] = ServiceDataHeader::kAdTypeServiceData16;
 
-    const uint8_t device_info = inner.data()[kHeaderBytes - 1];
-    const uint8_t *plaintext = inner.data() + kHeaderBytes;
-    const size_t plain_len = inner.size() - kHeaderBytes;
-
-    uint8_t *ciphertext = out + kFlagsBytes + kHeaderBytes;
-    uint8_t *counter_out = ciphertext + plain_len;
-    uint8_t *mic_out = counter_out + Encryptor::kCounterBytes;
-    if (!encryptor.encrypt(device_info, plaintext, plain_len, ciphertext, counter_out, mic_out))
+    // Checked above against `total`, so the capacity passed on cannot be the
+    // reason this fails; a failure here is the cipher backend's.
+    if (build_encrypted_service_data(packet, encryptor, out + kFlagsBytes + 2,
+                                     out_capacity - kFlagsBytes - 2) < 0)
     {
         return -1;
     }
