@@ -277,6 +277,7 @@ pip install bthome-ble
 ## Examples
 
 - Arduino AVR, payload building without a BLE stack: `examples/arduino_avr/arduino_avr.ino`
+- Arduino AVR encrypted, off BLE entirely (external cipher, EEPROM counter): [`examples/arduino_avr_encrypted/`](examples/arduino_avr_encrypted/README.md)
 - Arduino NimBLE: `examples/arduino_nimble/arduino_nimble.ino`
 - Arduino NimBLE receiving, the counterpart of the above: `examples/arduino_nimble_scan/arduino_nimble_scan.ino`
 - Arduino NimBLE encrypted (MAC + Preferences counter): `examples/arduino_nimble_encrypted/arduino_nimble_encrypted.ino`

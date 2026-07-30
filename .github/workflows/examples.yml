@@ -61,6 +61,10 @@ jobs:
     # job proves the C-standard-header approach keeps the library buildable
     # on ATmega boards (Uno/Nano/Pro Mini).
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        example: [arduino_avr, arduino_avr_encrypted]
     steps:
       - uses: actions/checkout@v5
       - uses: arduino/setup-arduino-cli@v2
@@ -74,6 +78,35 @@ jobs:
           arduino-cli core install arduino:avr
           mkdir -p ~/Arduino/libraries
           cp -r "$GITHUB_WORKSPACE" ~/Arduino/libraries/bthome-cpp
+      - name: Install micro-AES
+        # Only the encrypted example needs a cipher, and this library ships
+        # none by design. Fetched here rather than vendored, so the repository
+        # keeps containing no cryptographic implementation of its own.
+        #
+        # Both edits below are what the example's README tells a user to do,
+        # and both are load-bearing:
+        #
+        # The nonce and tag lengths are enum values, not #defines, so -D cannot
+        # override them and the header has to be edited. At the defaults of 11
+        # and 16 the build still succeeds and produces a packet no BTHome
+        # receiver can read.
+        #
+        # Turning the unused modes off is not tidiness. With micro-AES's
+        # defaults this sketch needs 5572 bytes of RAM on a part that has 2048 -
+        # and arduino-cli reports that as "272%" without failing, so it would
+        # be a green run for a binary that cannot boot. CCM alone fits in 1450.
+        #
+        # The greps make a failed substitution loud rather than silent.
+        if: matrix.example == 'arduino_avr_encrypted'
+        run: |
+          git clone --depth 1 https://github.com/polfosol/micro-AES ~/Arduino/libraries/micro-AES
+          cd ~/Arduino/libraries/micro-AES
+          sed -i 's/CCM_NONCE_LEN    = 11,/CCM_NONCE_LEN    = 13,/' micro_aes.h
+          sed -i 's/CCM_TAG_LEN      = 16,/CCM_TAG_LEN      = 4,/' micro_aes.h
+          sed -i -E 's/^#define (ECB|CBC|CFB|OFB|XEX|KWA|FPE|CMAC|GCM|EAX|SIV|GCM_SIV|OCB|POLY1305|CTS|XTS)( +)1/#define \1\20/' micro_aes.h
+          grep -q 'CCM_NONCE_LEN    = 13,' micro_aes.h
+          grep -q 'CCM_TAG_LEN      = 4,' micro_aes.h
+          test "$(grep -cE '^#define (ECB|CBC|CFB|OFB|XEX|KWA|FPE|CMAC|GCM|EAX|SIV|GCM_SIV|OCB|POLY1305|CTS|XTS) +0' micro_aes.h)" = 16
       - name: Build example
         # The stock AVR core builds gnu++11 by default; the library needs
         # C++17, so pass the flag explicitly (cores like MiniCore default
@@ -81,7 +114,7 @@ jobs:
         run: >
           arduino-cli compile --fqbn arduino:avr:uno --warnings more
           --build-property compiler.cpp.extra_flags=-std=gnu++17
-          examples/arduino_avr
+          examples/${{ matrix.example }}
 
   platformio:
     # Covers the PlatformIO consumer path (the README's lib_deps install and
