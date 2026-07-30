@@ -181,6 +181,104 @@ static bool failing_backend(const uint8_t *, const uint8_t *,
     return false;
 }
 
+static void test_service_data_spec_vector()
+{
+    // Tests: build_encrypted_service_data against the spec vector - the same
+    //        bytes as the advertisement, without the AD wrapper.
+    // Expects: [uuid][device-info][ciphertext][counter][MIC] and nothing else,
+    //          which is exactly what Decryptor::decryptServiceData() consumes.
+    BTHome::EncryptedPacket<28> packet;
+    packet.add(BTHome::temperature(25.06f));
+    packet.add(BTHome::humidity(50.55f));
+
+    BTHome::Encryptor encryptor(&BTHome::mbedtls_ccm_backend);
+    encryptor.setKey(kSpecKey);
+    encryptor.setMac(kSpecMac);
+    encryptor.setCounter(kSpecCounter);
+
+    uint8_t out[26] = {};
+    const int size = BTHome::build_encrypted_service_data(packet, encryptor, out, sizeof(out));
+    const uint8_t want[] = {
+        0xD2, 0xFC, 0x41,                    // UUID + device-info, encrypted bit set
+        0xE4, 0x45, 0xF3, 0xC9, 0x96, 0x2B,  // Ciphertext
+        0x33, 0x22, 0x11, 0x00,              // Counter (little-endian)
+        0x6C, 0x7C, 0x45, 0x19};             // MIC
+    expect_true("sd: build succeeded", size == static_cast<int>(sizeof(want)));
+    expect_bytes("sd: service data", out, static_cast<size_t>(size > 0 ? size : 0),
+                 want, sizeof(want));
+    expect_true("sd: counter consumed once", encryptor.counter() == kSpecCounter + 1);
+}
+
+static void test_service_data_is_the_advertising_tail()
+{
+    // Tests: The two builders agree - an advertisement is the Flags AD and the
+    //        AD length/type pair, then precisely this service data.
+    // Expects: Byte equality, so neither can drift from the other unnoticed.
+    //          build_encrypted_advertising delegates, which is what makes the
+    //          nonce and the counter come from one place only.
+    BTHome::EncryptedPacket<28> packet;
+    packet.add(BTHome::temperature(25.06f));
+    packet.add(BTHome::humidity(50.55f));
+
+    BTHome::Encryptor for_adv(&BTHome::mbedtls_ccm_backend);
+    for_adv.setKey(kSpecKey);
+    for_adv.setMac(kSpecMac);
+    for_adv.setCounter(kSpecCounter);
+    BTHome::Encryptor for_sd(&BTHome::mbedtls_ccm_backend);
+    for_sd.setKey(kSpecKey);
+    for_sd.setMac(kSpecMac);
+    for_sd.setCounter(kSpecCounter);
+
+    uint8_t adv[31] = {};
+    uint8_t sd[26] = {};
+    const int adv_size = BTHome::build_encrypted_advertising(packet, for_adv, adv, sizeof(adv));
+    const int sd_size = BTHome::build_encrypted_service_data(packet, for_sd, sd, sizeof(sd));
+
+    expect_true("sd: both built", adv_size > 5 && sd_size > 0);
+    expect_true("sd: advertisement is five bytes longer", adv_size == sd_size + 5);
+    expect_bytes("sd: advertisement tail equals service data",
+                 adv + 5, static_cast<size_t>(adv_size > 5 ? adv_size - 5 : 0),
+                 sd, static_cast<size_t>(sd_size > 0 ? sd_size : 0));
+}
+
+static void test_service_data_error_paths()
+{
+    // Tests: Error conditions of build_encrypted_service_data.
+    // Expects: -1 without consuming a counter value in every case - a consumed
+    //          counter that produced no packet is a gap a receiver reads as loss.
+    BTHome::EncryptedPacket<28> packet;
+    packet.add(BTHome::battery(50));
+
+    BTHome::Encryptor encryptor(&BTHome::mbedtls_ccm_backend);
+    encryptor.setKey(kSpecKey);
+    encryptor.setMac(kSpecMac);
+    encryptor.setCounter(7);
+
+    uint8_t out[26] = {};
+    expect_true("sd error: null output buffer",
+                BTHome::build_encrypted_service_data(packet, encryptor, nullptr, 26) == -1);
+    // This packet's plaintext service data is 5 bytes - [uuid][uuid][info] plus
+    // a 2-byte battery object - so with counter and MIC it needs 13.
+    expect_true("sd error: output buffer one byte too small",
+                BTHome::build_encrypted_service_data(packet, encryptor, out, 12) == -1);
+    expect_true("sd error: counter untouched after a short buffer", encryptor.counter() == 7);
+    expect_true("sd error: exactly enough is enough",
+                BTHome::build_encrypted_service_data(packet, encryptor, out, 13) == 13);
+    encryptor.setCounter(7);
+
+    BTHome::Encryptor no_backend(nullptr);
+    no_backend.setCounter(7);
+    expect_true("sd error: missing backend",
+                BTHome::build_encrypted_service_data(packet, no_backend, out, sizeof(out)) == -1);
+    expect_true("sd error: counter untouched without backend", no_backend.counter() == 7);
+
+    BTHome::Encryptor failing(&failing_backend);
+    failing.setCounter(7);
+    expect_true("sd error: failing backend",
+                BTHome::build_encrypted_service_data(packet, failing, out, sizeof(out)) == -1);
+    expect_true("sd error: counter untouched after backend failure", failing.counter() == 7);
+}
+
 static void test_error_paths()
 {
     // Tests: Error conditions of build_encrypted_advertising.
@@ -213,8 +311,13 @@ static void test_error_paths()
     expect_true("error: counter untouched after backend failure", failing.counter() == 7);
 }
 
-// Builds the spec-vector advertisement and returns its service-data section,
-// which is what a receiver gets: [uuid][info][ciphertext][counter][MIC].
+// Builds the spec vector's service data, which is what a receiver gets:
+// [uuid][info][ciphertext][counter][MIC].
+//
+// This used to build a whole advertisement and copy out everything past its
+// first five bytes. That workaround was the argument for the function it calls
+// now: every transport carrying BTHome without being BLE advertising had to
+// reinvent the same off-by-five.
 static size_t buildEncryptedServiceData(uint32_t counter, uint8_t *out, size_t out_capacity)
 {
     BTHome::EncryptedPacket<28> packet;
@@ -226,20 +329,8 @@ static size_t buildEncryptedServiceData(uint32_t counter, uint8_t *out, size_t o
     encryptor.setMac(kSpecMac);
     encryptor.setCounter(counter);
 
-    uint8_t adv[31] = {};
-    const int size = BTHome::build_encrypted_advertising(packet, encryptor, adv, sizeof(adv));
-    if (size <= 5)
-    {
-        return 0;
-    }
-    // Skip the Flags AD (3 bytes) and the AD length/type pair (2 bytes).
-    const size_t sd_len = static_cast<size_t>(size) - 5;
-    if (sd_len > out_capacity)
-    {
-        return 0;
-    }
-    memcpy(out, adv + 5, sd_len);
-    return sd_len;
+    const int size = BTHome::build_encrypted_service_data(packet, encryptor, out, out_capacity);
+    return size < 0 ? 0 : static_cast<size_t>(size);
 }
 
 static BTHome::Decryptor makeDecryptor()
@@ -447,6 +538,9 @@ int main()
     test_counter_makes_ciphertext_unique();
     test_trigger_flag_in_nonce();
     test_capacity_accounting();
+    test_service_data_spec_vector();
+    test_service_data_is_the_advertising_tail();
+    test_service_data_error_paths();
     test_error_paths();
     test_decrypt_round_trip();
     test_decrypt_payload_entry_point();
