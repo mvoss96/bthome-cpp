@@ -23,11 +23,11 @@ Dependency-free C++17 BTHome v2 payload builder and parser.
 Published in the [PlatformIO Registry](https://registry.platformio.org/libraries/mvoss96/bthome-cpp):
 
 ```ini
-lib_deps = mvoss96/bthome-cpp@^0.4.0
+lib_deps = mvoss96/bthome-cpp@^0.5.0
 ```
 
 Pinning a git tag works as well:
-`lib_deps = https://github.com/mvoss96/bthome-cpp.git#v0.4.0`
+`lib_deps = https://github.com/mvoss96/bthome-cpp.git#v0.5.0`
 
 ### Arduino
 
