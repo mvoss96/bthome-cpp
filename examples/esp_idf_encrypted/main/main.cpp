@@ -59,10 +59,14 @@ extern "C" void app_main(void) {
     s_encryptor.setMac(mac);
 
     // 2. Restore the counter with a safety margin and persist the new base.
+    //    Saturating add: a wrapped counter would reuse old nonces. At the
+    //    0xFFFFFFFF ceiling the Encryptor refuses every build - the key is
+    //    used up and must be replaced.
     nvs_open("bthome", NVS_READWRITE, &s_nvs);
     uint32_t counter = 0;
     nvs_get_u32(s_nvs, "counter", &counter);  // stays 0 on first boot
-    counter += kCounterMargin;
+    counter = (counter > 0xFFFFFFFFu - kCounterMargin) ? 0xFFFFFFFFu
+                                                       : counter + kCounterMargin;
     s_encryptor.setCounter(counter);
     nvs_set_u32(s_nvs, "counter", counter);
     nvs_commit(s_nvs);

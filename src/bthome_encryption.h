@@ -76,6 +76,7 @@ enum class DecryptStatus : uint8_t
     NotEncrypted, // the device-info encrypted bit is not set
     Replay,       // counter did not advance - a captured packet sent again
     AuthFailed,   // MIC mismatch: wrong key, or the packet was tampered with
+    BadUuid,      // service UUID is not BTHome's 0xFCD2 - not BTHome data
 };
 
 class Encryptor;
@@ -171,11 +172,18 @@ int build_encrypted_service_data(const EncryptedPacket<AdvCapacity> &packet,
  * @brief Holds the encryption material and produces BTHome v2 ciphertexts.
  *
  * The counter is owned and auto-incremented by this class: every successful
- * build consumes exactly one counter value. This makes CCM nonce reuse -
- * the one catastrophic failure mode - structurally impossible as long as one
+ * build consumes exactly one counter value, and a build at the end of the
+ * 32-bit counter space fails rather than wrap. Together that makes CCM nonce
+ * reuse - the one catastrophic failure mode - impossible as long as one
  * Encryptor instance is used per key. Restore the counter after reboot via
- * setCounter() (persist counter() with a safety margin); receivers reject
- * non-increasing counters as replays.
+ * setCounter() (persist counter() with a safety margin, added saturating);
+ * receivers reject non-increasing counters as replays.
+ *
+ * The last usable counter value is 0xFFFFFFFE. Once the counter reads
+ * 0xFFFFFFFF the key is used up: every build fails until a new key is
+ * provisioned and the counter reset. At one advertisement per second that
+ * point lies ~136 years out, but a persistence bug that restores a corrupt
+ * counter can reach it early - failing hard beats reusing a nonce.
  */
 class Encryptor
 {
@@ -213,7 +221,10 @@ public:
 
     /**
      * @brief Sets the counter used for the next encryption.
-     * @param counter Next counter value; must exceed every previously broadcast value.
+     * @param counter Next counter value; must exceed every previously broadcast
+     *        value. 0xFFFFFFFF marks the counter space as exhausted and makes
+     *        every build fail - saturate to it rather than wrap when adding a
+     *        restore margin.
      */
     void setCounter(uint32_t counter)
     {
@@ -251,7 +262,8 @@ private:
      * @param ciphertext  Output buffer for @p length encrypted bytes.
      * @param counter_out Output buffer for the 4-byte little-endian counter.
      * @param mic_out     Output buffer for the 4-byte MIC.
-     * @return true on success, false if no backend is set or the backend fails.
+     * @return true on success, false if no backend is set, the backend fails,
+     *         or the counter space is exhausted.
      */
     bool encrypt(uint8_t device_info,
                  const uint8_t *plaintext,
@@ -261,6 +273,14 @@ private:
                  uint8_t *mic_out)
     {
         if (m_fn == nullptr)
+        {
+            return false;
+        }
+
+        // A wrapped counter would repeat nonces already broadcast under this
+        // key - the one failure CCM cannot survive. 0xFFFFFFFF is therefore
+        // never encrypted with: reaching it means the key is used up.
+        if (m_counter == 0xFFFFFFFFu)
         {
             return false;
         }
@@ -428,6 +448,14 @@ int build_encrypted_advertising(const EncryptedPacket<AdvCapacity> &packet,
     }
 
     const size_t ad_size = packet.size(); // Inner size + counter + MIC.
+    // The AD length byte counts type + data, so one element caps out at 256
+    // bytes. A larger EncryptedPacket is legal for service data on non-BLE
+    // transports (build_encrypted_service_data()), but cannot be encoded
+    // here - truncating the length byte would corrupt the advertisement.
+    if (ad_size > 256)
+    {
+        return -1;
+    }
     const size_t total = kFlagsBytes + ad_size + ((local_name_len > 0) ? (2 + local_name_len) : 0);
     if (total > out_capacity)
     {
@@ -531,6 +559,7 @@ public:
      * @brief Decrypts received BTHome service data.
      *
      * @param service_data [uuid lo][uuid hi][device info][ciphertext][counter][MIC].
+     *        The service UUID is verified; a mismatch is BadUuid.
      * @param len Number of bytes in @p service_data.
      * @param out Receives [uuid lo][uuid hi][device info][objects...] - the
      *        encrypted bit is cleared, so the result feeds BTHome::Decoder
@@ -590,6 +619,16 @@ private:
         if (data == nullptr || out == nullptr || len < header)
         {
             return DecryptStatus::BadBuffer;
+        }
+
+        // Whatever this buffer is, it is not BTHome service data - rejecting
+        // it here keeps the decryptor as strict as the Decoder, which refuses
+        // the same bytes in their plaintext form.
+        if (uuid_bytes != 0 &&
+            (data[0] != static_cast<uint8_t>(kServiceUuid & 0xFFu) ||
+             data[1] != static_cast<uint8_t>(kServiceUuid >> 8)))
+        {
+            return DecryptStatus::BadUuid;
         }
 
         // Checked before the length: a plaintext packet is shorter than the
