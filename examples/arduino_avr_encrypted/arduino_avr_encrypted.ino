@@ -77,6 +77,13 @@ static uint8_t packetId = 0;
 
 static void storeCounter(uint32_t counter)
 {
+    // Never store 0xFFFFFFFF: a fresh chip reads the same value, so the next
+    // boot would mistake an exhausted counter for an empty EEPROM and restart
+    // at zero, reusing nonces. 0xFFFFFFFE restores to the same dead end.
+    if (counter == 0xFFFFFFFFul)
+    {
+        counter = 0xFFFFFFFEul;
+    }
     EEPROM.put(kCounterAddr, counter);
     counterStored = counter;
 }
@@ -108,7 +115,11 @@ void setup()
     {
         counter = 0;
     }
-    counter += kCounterMargin;
+    // Saturating add: a wrapped counter would reuse nonces already broadcast
+    // under this key. At the 0xFFFFFFFF ceiling the Encryptor refuses every
+    // build - the key is used up and must be replaced.
+    counter = (counter > 0xFFFFFFFFul - kCounterMargin) ? 0xFFFFFFFFul
+                                                        : counter + kCounterMargin;
     encryptor.setCounter(counter);
     storeCounter(counter);
 }

@@ -89,8 +89,10 @@ what runs out on your board, that is where it went.
    backwards does not corrupt anything; it mutes the device until the receiver
    is restarted, which is the more confusing failure of the two.
 
-3. **One build per update.** Each consumes exactly one counter value, which is
-   what makes CCM nonce reuse structurally impossible.
+3. **One build per update.** Each consumes exactly one counter value, and a
+   build at the end of the 32-bit counter space fails instead of wrapping —
+   together that is what rules out CCM nonce reuse. The margin addition above
+   saturates for the same reason.
 
 ## Build
 
