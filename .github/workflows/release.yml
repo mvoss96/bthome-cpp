@@ -1,8 +1,9 @@
 name: Release
 
-# On every version tag: verify the tag matches both library manifests, then
-# publish a GitHub release with auto-generated notes. A mismatching tag
-# produces a red run and NO release - fix the manifests, delete and re-tag.
+# On every version tag: verify the tag matches all three library manifests
+# and has a CHANGELOG.md section, then publish a GitHub release with that
+# section as its notes. A mismatching tag or missing section produces a red
+# run and NO release - fix the files, delete and re-tag.
 on:
   push:
     tags: ["v*"]
@@ -25,14 +26,29 @@ jobs:
           test "$TAG" = "$PROPS"
           test "$TAG" = "$JSON"
           test "$TAG" = "$IDF"
-      - name: Create GitHub release
+      - name: Extract release notes from CHANGELOG.md
+        run: |
+          awk -v tag="$GITHUB_REF_NAME" '
+            !found && $0 ~ "^## "tag"( |$)" { found=1; next }
+            found && (/^## / || /^---/) { exit }
+            found { print }
+            END { if (!found) exit 1 }
+          ' CHANGELOG.md > release-notes.md || {
+            echo "::error::CHANGELOG.md has no section '## $GITHUB_REF_NAME' — add one before tagging"
+            exit 1
+          }
+          cat release-notes.md
+      - name: Create or complete the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" \
-            --verify-tag \
-            --title "$GITHUB_REF_NAME" \
-            --generate-notes
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            # Tag came from a web-UI release: the changelog section replaces
+            # whatever was typed there - CHANGELOG.md is the source of truth.
+            gh release edit "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file release-notes.md
+          else
+            gh release create "$GITHUB_REF_NAME" --verify-tag --title "$GITHUB_REF_NAME" --notes-file release-notes.md
+          fi
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
