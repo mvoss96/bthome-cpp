@@ -59,6 +59,37 @@ static void test_header()
                 none.status() == BTHome::DecodeStatus::End);
 }
 
+static void test_versions()
+{
+    // Tests: Device-info version bits other than 2, and reserved bits.
+    // Expects: An unknown version is refused - it may lay out the whole
+    //          payload differently, and decoding it as v2 would fabricate
+    //          values. Reserved bits are tolerated: they do not change the
+    //          object format, and custom senders may use them.
+    const uint8_t v3[] = {0xD2, 0xFC, 0x60, /*pid*/ 0x00, 0x05}; // version 3
+    BTHome::Decoder dec(v3, sizeof(v3));
+    BTHome::Decoded d;
+    expect_true("version: v3 refused",
+                !dec.next(d) && dec.status() == BTHome::DecodeStatus::UnsupportedVersion);
+    expect_true("version: refused version still readable", dec.version() == 3);
+
+    const uint8_t v0[] = {0x00, /*pid*/ 0x00, 0x05}; // version 0, no uuid
+    BTHome::Decoder viaPayload = BTHome::Decoder::fromPayload(v0, sizeof(v0));
+    expect_true("version: v0 refused via payload entry point",
+                viaPayload.status() == BTHome::DecodeStatus::UnsupportedVersion);
+
+    // 0x5A = version 2 with the reserved bits 1, 3 and 4 set.
+    const uint8_t reserved[] = {0xD2, 0xFC, 0x5A, /*pid*/ 0x00, 0x05};
+    BTHome::Decoder tolerant(reserved, sizeof(reserved));
+    size_t n = 0;
+    while (tolerant.next(d))
+    {
+        ++n;
+    }
+    expect_true("version: reserved bits tolerated",
+                n == 1 && d.raw == 5 && tolerant.status() == BTHome::DecodeStatus::End);
+}
+
 static void test_scaled_sensors()
 {
     BTHome::Packet<31> p;
@@ -325,6 +356,7 @@ static void test_malformed()
 int main()
 {
     test_header();
+    test_versions();
     test_scaled_sensors();
     test_integer_sensors();
     test_binary_and_events();
