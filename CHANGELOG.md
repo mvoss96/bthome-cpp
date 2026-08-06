@@ -6,8 +6,8 @@ here (in addition to the three version manifests) before tagging.
 
 ## v0.5.1 (2026-08-06)
 
-- Fixes from an external review of the library: encryption counter handling,
-  service UUID, AD length, version reporting and CTest coverage gaps.
+- Fixes: encryption counter handling, service UUID, AD length, version
+  reporting; CTest coverage gaps closed.
 
 ## v0.5.0 (2026-07-30)
 
@@ -16,8 +16,8 @@ here (in addition to the three version manifests) before tagging.
 
 ## v0.4.2 (2026-07-26)
 
-- Audit follow-ups: AVR compile gate in CI, third library manifest
-  (`idf_component.yml`), two documentation fixes.
+- AVR compile gate in CI, third library manifest (`idf_component.yml`),
+  two documentation fixes.
 
 ## v0.4.1 (2026-07-25)
 
