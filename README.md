@@ -156,7 +156,9 @@ headers (include the one your platform provides):
   `-lmbedcrypto`.
 - `bthome_crypto_psa.h` — PSA Crypto API; vanilla Zephyr (mbedtls-backed),
   nRF Connect SDK (Oberon/CryptoCell — the legacy mbedtls API is deprecated
-  there), and TF-M environments.
+  there), and TF-M environments. Its fixed scratch buffer caps the plaintext
+  at 60 bytes per build — ample for legacy 31-byte advertising; use the
+  mbedtls adapter for near-maximal extended-advertising payloads.
 
 Both adapters are tested against the official spec vector and produce
 byte-identical output.
@@ -180,10 +182,13 @@ int n = BTHome::build_encrypted_advertising(packet, encryptor, adv, sizeof(adv))
 ```
 
 The counter is owned by the `Encryptor` and consumed exactly once per
-successful build, so CCM nonce reuse is structurally impossible. It must
-survive reboots: persist `encryptor.counter()` periodically and restore it
-with a safety margin via `setCounter()` — receivers reject non-increasing
-counters as replays. Encryption costs 8 bytes of advertisement budget.
+successful build, and a build at the end of the 32-bit counter space fails
+instead of wrapping — together that rules out CCM nonce reuse. The counter
+must survive reboots: persist `encryptor.counter()` periodically and restore
+it with a safety margin via `setCounter()` (add the margin saturating, as the
+examples do) — receivers reject non-increasing counters as replays. Once the
+counter reads `0xFFFFFFFF` the key is used up and every build fails until a
+new key is provisioned. Encryption costs 8 bytes of advertisement budget.
 
 #### Encrypting for something other than BLE advertising
 

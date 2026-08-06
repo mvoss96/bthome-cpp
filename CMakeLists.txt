@@ -19,12 +19,26 @@ target_include_directories(bthome INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_compile_features(bthome INTERFACE cxx_std_17)
 add_library(bthome::bthome ALIAS bthome)
 
-# Optional host test target: cmake -DBTHOME_BUILD_TESTS=ON ..
-option(BTHOME_BUILD_TESTS "Build host correctness test" OFF)
+# Optional host test targets: cmake -DBTHOME_BUILD_TESTS=ON ..
+option(BTHOME_BUILD_TESTS "Build host correctness tests" OFF)
 if(BTHOME_BUILD_TESTS)
     enable_testing()
-    add_executable(test_bthome tests/test_bthome.cpp)
-    target_link_libraries(test_bthome PRIVATE bthome)
-    target_compile_options(test_bthome PRIVATE -fno-exceptions -fno-rtti -Wall -Wextra)
-    add_test(NAME test_bthome COMMAND test_bthome)
+    foreach(t IN ITEMS test_bthome test_factories test_decode)
+        add_executable(${t} tests/${t}.cpp)
+        target_link_libraries(${t} PRIVATE bthome)
+        target_compile_options(${t} PRIVATE -fno-exceptions -fno-rtti -Wall -Wextra)
+        add_test(NAME ${t} COMMAND ${t})
+    endforeach()
+
+    # test_encryption exercises the mbedtls and PSA adapters and therefore
+    # needs libmbedcrypto; skipped with a notice where it is not installed.
+    find_library(BTHOME_MBEDCRYPTO mbedcrypto)
+    if(BTHOME_MBEDCRYPTO)
+        add_executable(test_encryption tests/test_encryption.cpp)
+        target_link_libraries(test_encryption PRIVATE bthome ${BTHOME_MBEDCRYPTO})
+        target_compile_options(test_encryption PRIVATE -fno-exceptions -fno-rtti -Wall -Wextra)
+        add_test(NAME test_encryption COMMAND test_encryption)
+    else()
+        message(STATUS "bthome: mbedcrypto not found - test_encryption is not built")
+    endif()
 endif()

@@ -181,6 +181,68 @@ static bool failing_backend(const uint8_t *, const uint8_t *,
     return false;
 }
 
+static void test_counter_exhaustion()
+{
+    // Tests: Builds at the end of the 32-bit counter space.
+    // Expects: 0xFFFFFFFE is the last counter value that encrypts; at
+    //          0xFFFFFFFF every build fails instead of wrapping to 0, which
+    //          would reuse the key's very first nonces.
+    BTHome::EncryptedPacket<28> packet;
+    packet.add(BTHome::battery(50));
+
+    BTHome::Encryptor encryptor(&BTHome::mbedtls_ccm_backend);
+    encryptor.setKey(kSpecKey);
+    encryptor.setMac(kSpecMac);
+    encryptor.setCounter(0xFFFFFFFEu);
+
+    uint8_t out[31] = {};
+    expect_true("exhaustion: last counter value still builds",
+                BTHome::build_encrypted_service_data(packet, encryptor, out, sizeof(out)) > 0);
+    expect_true("exhaustion: counter parked at the ceiling",
+                encryptor.counter() == 0xFFFFFFFFu);
+    expect_true("exhaustion: next service-data build refused",
+                BTHome::build_encrypted_service_data(packet, encryptor, out, sizeof(out)) == -1);
+    expect_true("exhaustion: advertising build refused too",
+                BTHome::build_encrypted_advertising(packet, encryptor, out, sizeof(out)) == -1);
+    expect_true("exhaustion: counter never wrapped", encryptor.counter() == 0xFFFFFFFFu);
+}
+
+static void test_oversized_ad_rejected()
+{
+    // Tests: An EncryptedPacket larger than one AD element can describe. The
+    //        AD length byte counts type + data, capping ad_size at 256; a
+    //        bigger packet used to truncate the length byte (263 -> length 6).
+    // Expects: build_encrypted_advertising refuses without consuming a
+    //          counter; build_encrypted_service_data (no AD wrapper) and a
+    //          packet of exactly 256 bytes keep working.
+    BTHome::EncryptedPacket<263> packet;
+    const uint8_t blob[BTHome::VarMeasurement::kMaxBytes] = {};
+    while (packet.add(BTHome::raw(blob, sizeof(blob)))) {}
+    while (packet.add(BTHome::battery(1))) {}
+    expect_true("oversized: packet exceeds one AD element", packet.size() > 256);
+
+    BTHome::Encryptor encryptor(&BTHome::mbedtls_ccm_backend);
+    encryptor.setKey(kSpecKey);
+    encryptor.setMac(kSpecMac);
+    encryptor.setCounter(5);
+
+    uint8_t out[280] = {};
+    expect_true("oversized: advertising builder refuses",
+                BTHome::build_encrypted_advertising(packet, encryptor, out, sizeof(out)) == -1);
+    expect_true("oversized: no counter consumed", encryptor.counter() == 5);
+    expect_true("oversized: service-data builder still accepts",
+                BTHome::build_encrypted_service_data(packet, encryptor, out, sizeof(out)) > 0);
+
+    // The boundary case: exactly 256 bytes is still encodable (length 0xFF).
+    BTHome::EncryptedPacket<256> boundary;
+    while (boundary.add(BTHome::raw(blob, sizeof(blob)))) {}
+    boundary.add(BTHome::text("1234567"));
+    expect_true("boundary: packet fills exactly one AD element", boundary.size() == 256);
+    const int n = BTHome::build_encrypted_advertising(boundary, encryptor, out, sizeof(out));
+    expect_true("boundary: builds", n == 3 + 256);
+    expect_true("boundary: AD length byte is 0xFF", out[3] == 0xFF);
+}
+
 static void test_service_data_spec_vector()
 {
     // Tests: build_encrypted_service_data against the spec vector - the same
@@ -516,6 +578,22 @@ static void test_decrypt_rejections()
                         BTHome::DecryptStatus::NoBackend);
     }
 
+    // Tests: A packet whose two UUID bytes are not FCD2.
+    // Expects: BadUuid before any decryption - the decryptor used to ignore
+    //          the bytes and overwrite them with D2 FC on success, decrypting
+    //          arbitrary non-BTHome data into seemingly valid service data.
+    {
+        uint8_t wrong_uuid[32] = {};
+        memcpy(wrong_uuid, sd, sd_len);
+        wrong_uuid[0] = 0x34;
+        wrong_uuid[1] = 0x12;
+        BTHome::Decryptor decryptor = makeDecryptor();
+        expect_true("wrong uuid: rejected",
+                    decryptor.decryptServiceData(wrong_uuid, sd_len, plain, sizeof(plain), plain_len) ==
+                        BTHome::DecryptStatus::BadUuid);
+        expect_true("wrong uuid: replay state untouched", !decryptor.haveCounter());
+    }
+
     // Tests: A later counter after a restored replay state.
     // Expects: Accepted, and the stored counter moves forward.
     {
@@ -542,6 +620,8 @@ int main()
     test_service_data_is_the_advertising_tail();
     test_service_data_error_paths();
     test_error_paths();
+    test_counter_exhaustion();
+    test_oversized_ad_rejected();
     test_decrypt_round_trip();
     test_decrypt_payload_entry_point();
     test_decrypt_psa_backend();

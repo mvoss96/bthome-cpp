@@ -38,8 +38,14 @@ void setup() {
   encryptor.setMac(mac);
 
   // 2. Restore the counter with a safety margin and persist the new base.
+  //    Saturating add: a wrapped counter would reuse old nonces. At the
+  //    0xFFFFFFFF ceiling the Encryptor refuses every build - the key is
+  //    used up and must be replaced.
   prefs.begin("bthome");
-  const uint32_t counter = prefs.getUInt("counter", 0) + kCounterMargin;
+  const uint32_t stored = prefs.getUInt("counter", 0);
+  const uint32_t counter = (stored > 0xFFFFFFFFu - kCounterMargin)
+                               ? 0xFFFFFFFFu
+                               : stored + kCounterMargin;
   encryptor.setCounter(counter);
   prefs.putUInt("counter", counter);
 

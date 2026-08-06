@@ -94,6 +94,7 @@ namespace BTHome
         Encrypted, // device-info encrypted bit is set; decrypt first
         Truncated, // an object announces more bytes than the buffer holds
         UnknownId, // object id unknown here; out.object_id names it
+        UnsupportedVersion, // device-info names a BTHome version other than 2
     };
 
     /**
@@ -263,6 +264,17 @@ namespace BTHome
             }
 
             m_info = data[uuid_bytes];
+            // A version other than 2 may lay out the whole payload differently,
+            // so it is refused rather than decoded as if it were v2. m_info is
+            // already set: version() still names the version that was refused.
+            // The reserved device-info bits are deliberately tolerated - they
+            // do not change the object format, and rejecting them would break
+            // both forward compatibility and senders using them privately.
+            if (version() != 2)
+            {
+                m_status = DecodeStatus::UnsupportedVersion;
+                return;
+            }
             // Encrypted payloads carry ciphertext objects, so refuse to
             // iterate them right away. Decrypt first, then feed the plaintext
             // to a new Decoder (see bthome_encryption.h for the layout).
