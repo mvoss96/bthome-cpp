@@ -110,6 +110,46 @@ Result format:
 
 `[Flags AD][BTHome Service Data AD][optional Local Name AD]`
 
+
+## Fixed object sets
+
+A sensor node usually sends the same objects every cycle and only varies the
+values. `BTHome::StaticPacket` takes them as constructor arguments, and since
+the factories return a type that carries the object id, the layout is deduced:
+
+```cpp
+BTHome::StaticPacket packet(BTHome::packet_id(7),
+                            BTHome::temperature(22.4f),
+                            BTHome::humidity(54.3f),
+                            BTHome::battery(92));
+```
+
+No template arguments, no per-object setter, and each id is written once — in
+the factory, where it belongs. Pairing a value with the wrong id is not a
+runtime check but impossible to express.
+
+The arguments may be in any order; objects are placed in ascending id order the
+way BTHome requires. The emitted bytes are identical to `Packet`'s, and
+`build_advertising()` takes either type. On an ATmega328P, for the four objects
+above:
+
+| | Flash | Packet object |
+|---|---|---|
+| `Packet<31>` | 2576 B | 52 B |
+| `StaticPacket<…>` | 1776 B | 15 B |
+
+A `StaticPacket` always transmits its whole set — the layout is fixed, so an
+object cannot be left out. A value the factories could not encode (they drop
+NaN and the infinities) therefore goes on the air as zero rather than being
+omitted; use `Packet` where a sensor can be unavailable.
+
+`StaticPacket` is an addition, not a replacement. Use `Packet` when the object
+set varies between packets, for `Text`/`Raw`/command events (their length is
+not a compile-time property), for several objects with the same id such as
+button padding, and for encrypted packets. Each of those is a `static_assert`
+naming the reason, not a silent misencode.
+
+
 ## Decoding
 
 `BTHome::Decoder` iterates the objects of one service-data buffer in place
@@ -282,6 +322,7 @@ pip install bthome-ble
 ## Examples
 
 - Arduino AVR, payload building without a BLE stack: `examples/arduino_avr/arduino_avr.ino`
+- Arduino AVR with a compile-time object set, same bytes for ~1.2 KB less flash: `examples/arduino_avr_static/arduino_avr_static.ino`
 - Arduino NimBLE: `examples/arduino_nimble/arduino_nimble.ino`
 - Arduino NimBLE receiving, the counterpart of the above: `examples/arduino_nimble_scan/arduino_nimble_scan.ino`
 - Arduino NimBLE encrypted (MAC + Preferences counter): `examples/arduino_nimble_encrypted/arduino_nimble_encrypted.ino`

@@ -19,6 +19,7 @@
 #include "bthome_encoding.h"
 #include "bthome_factories.h"
 #include "bthome_packet.h"
+#include "bthome_static_packet.h"
 #include "bthome_advertising.h"
 #include "bthome_encryption.h"
 #include "bthome_decode.h"

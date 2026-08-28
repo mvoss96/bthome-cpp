@@ -15,7 +15,8 @@ namespace BTHome
 
 /**
  * @brief Build a raw BLE advertising payload for BTHome.
- * @tparam PacketCapacity Capacity parameter of the input Packet.
+ * @tparam PacketT Any packet type exposing data() and size() - Packet or
+ *         StaticPacket.
  * @param packet Source BTHome service-data AD element.
  * @param out Destination byte buffer for the final raw advertising payload.
  * @param out_capacity Capacity of @p out in bytes.
@@ -23,8 +24,8 @@ namespace BTHome
  * @param complete_local_name true for AD type 0x09 (Complete Local Name), false for 0x08 (Shortened Local Name).
  * @return Payload size in bytes on success, or -1 on error.
  */
-template <size_t PacketCapacity>
-int build_advertising(const Packet<PacketCapacity> &packet,
+template <typename PacketT>
+int build_advertising(const PacketT &packet,
                       uint8_t *out,
                       size_t out_capacity,
                       const char *local_name = nullptr,

@@ -240,4 +240,46 @@ namespace BTHome
                       "object_layout() table is internally inconsistent");
 
     } // namespace detail
+
+    /**
+     * @brief A measurement that carries its object id in its type.
+     *
+     * Measurement::object_id is a runtime field, so a template parameter
+     * cannot be deduced from it. The factories return this instead, which lets
+     * StaticPacket work out its layout from the values alone:
+     *
+     *   BTHome::StaticPacket packet(BTHome::temperature(22.4f),
+     *                               BTHome::humidity(54.3f));
+     *
+     * It carries only the bytes its object actually has, not the six a
+     * Measurement reserves for the widest one. A StaticPacket constructor has
+     * to materialize all of its measurements at once, and on AVR the
+     * difference between four 8-byte objects and four 2-to-4-byte ones is
+     * hundreds of bytes of flash.
+     */
+    template <ObjectId Id>
+    struct Typed
+    {
+        static constexpr uint8_t kWidth = detail::object_layout(detail::oid(Id)).width;
+
+        // len is kWidth normally and 0 when the factory could not encode the
+        // value - make_sensor() drops NaN and the infinities that way, and
+        // Packet::add() rejects a zero-length measurement.
+        uint8_t len = kWidth;
+        uint8_t data[kWidth ? kWidth : 1] = {};
+
+        /** @brief Converts wherever a plain Measurement is expected. */
+        operator Measurement() const
+        {
+            Measurement m;
+            m.object_id = detail::oid(Id);
+            m.len = len;
+            for (uint8_t i = 0; i < kWidth; ++i)
+            {
+                m.data[i] = data[i];
+            }
+            return m;
+        }
+    };
+
 } // namespace BTHome
