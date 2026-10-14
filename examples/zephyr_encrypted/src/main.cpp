@@ -63,6 +63,8 @@ int main(void) {
         BT_DATA(BT_DATA_SVC_DATA16, adv + 5, static_cast<uint8_t>(n - 5)),
     };
 
-    bt_le_adv_start(BT_LE_ADV_NCONN, ad, ARRAY_SIZE(ad), nullptr, 0);
+    // Advertise from the identity address the nonce MAC was taken from. Plain
+    // BT_LE_ADV_NCONN uses a random address, so receivers could not decrypt.
+    bt_le_adv_start(BT_LE_ADV_NCONN_IDENTITY, ad, ARRAY_SIZE(ad), nullptr, 0);
     return 0;
 }
