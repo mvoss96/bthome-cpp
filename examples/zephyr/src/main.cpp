@@ -25,6 +25,8 @@ int main(void) {
                 packet.serviceDataSize()),
     };
 
-    bt_le_adv_start(BT_LE_ADV_NCONN, ad, ARRAY_SIZE(ad), nullptr, 0);
+    // Advertise from the identity address. Plain BT_LE_ADV_NCONN uses a new
+    // random address on every start, and receivers identify BTHome devices by it.
+    bt_le_adv_start(BT_LE_ADV_NCONN_IDENTITY, ad, ARRAY_SIZE(ad), nullptr, 0);
     return 0;
 }
