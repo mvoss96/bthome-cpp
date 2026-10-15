@@ -77,6 +77,19 @@ namespace BTHome
             return m;
         }
 
+        /** @brief Wraps an encoded Measurement in its compile-time id. */
+        template <ObjectId Id>
+        inline Typed<Id> tagged(const Measurement &m)
+        {
+            Typed<Id> t{};
+            t.len = m.len;
+            for (uint8_t i = 0; i < Typed<Id>::kWidth; ++i)
+            {
+                t.data[i] = m.data[i];
+            }
+            return t;
+        }
+
         // The object id is a template parameter, not a function parameter, on
         // purpose. Inside the function a parameter is not a constant
         // expression, so object_layout() would be an ordinary call - and at
@@ -94,7 +107,7 @@ namespace BTHome
          * @return Encoded Measurement.
          */
         template <ObjectId Id>
-        inline Measurement make_sensor(float value)
+        inline Typed<Id> make_sensor(float value)
         {
             constexpr uint8_t byte_id = oid(Id);
             constexpr ObjectLayout l = object_layout(byte_id);
@@ -123,7 +136,7 @@ namespace BTHome
             if (!(value >= -FLT_MAX && value <= FLT_MAX))
             {
                 m.len = 0;
-                return m;
+                return tagged<Id>(m);
             }
 
             // Scale to raw units, clamping in float space: converting an
@@ -162,7 +175,7 @@ namespace BTHome
                 u >>= 8;
             }
 
-            return m;
+            return tagged<Id>(m);
         }
 
         // The payload width of an object is stated once, in object_layout().
@@ -176,13 +189,13 @@ namespace BTHome
          * @return Encoded Measurement.
          */
         template <ObjectId Id>
-        inline Measurement u(uint64_t raw)
+        inline Typed<Id> u(uint64_t raw)
         {
             constexpr uint8_t byte_id = oid(Id);
             constexpr ObjectLayout l = object_layout(byte_id);
             static_assert(l.width != 0 && !l.variable, "object id has no fixed width");
             static_assert(!l.scaled, "scaled objects must go through make_sensor()");
-            return make_u(byte_id, raw, l.width);
+            return tagged<Id>(make_u(byte_id, raw, l.width));
         }
 
         /**
@@ -192,14 +205,14 @@ namespace BTHome
          * @return Encoded Measurement.
          */
         template <ObjectId Id>
-        inline Measurement s(int64_t raw)
+        inline Typed<Id> s(int64_t raw)
         {
             constexpr uint8_t byte_id = oid(Id);
             constexpr ObjectLayout l = object_layout(byte_id);
             static_assert(l.width != 0 && !l.variable, "object id has no fixed width");
             static_assert(l.is_signed, "object id is not a signed object");
             static_assert(!l.scaled, "scaled objects must go through make_sensor()");
-            return make_s(byte_id, raw, l.width);
+            return tagged<Id>(make_s(byte_id, raw, l.width));
         }
 
         /**
@@ -209,7 +222,7 @@ namespace BTHome
          * @return Encoded Measurement.
          */
         template <ObjectId Id>
-        inline Measurement b(bool on)
+        inline Typed<Id> b(bool on)
         {
             constexpr uint8_t byte_id = oid(Id);
             constexpr ObjectLayout l = object_layout(byte_id);
@@ -219,7 +232,7 @@ namespace BTHome
             m.object_id = byte_id;
             m.len = l.width;
             m.data[0] = on ? 1 : 0;
-            return m;
+            return tagged<Id>(m);
         }
 
     } // namespace detail

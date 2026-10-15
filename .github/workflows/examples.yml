@@ -59,8 +59,14 @@ jobs:
   arduino-avr:
     # Classic AVR (avr-gcc): no libstdc++ wrapper headers exist there, so this
     # job proves the C-standard-header approach keeps the library buildable
-    # on ATmega boards (Uno/Nano/Pro Mini).
+    # on ATmega boards (Uno/Nano/Pro Mini). The static variant additionally
+    # instantiates StaticPacket, whose fold expressions avr-gcc 7.3 would
+    # otherwise never see - the header alone is not enough to check a template.
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        example: [arduino_avr, arduino_avr_static]
     steps:
       - uses: actions/checkout@v5
       - uses: arduino/setup-arduino-cli@v2
@@ -81,7 +87,7 @@ jobs:
         run: >
           arduino-cli compile --fqbn arduino:avr:uno --warnings more
           --build-property compiler.cpp.extra_flags=-std=gnu++17
-          examples/arduino_avr
+          examples/${{ matrix.example }}
 
   platformio:
     # Covers the PlatformIO consumer path (the README's lib_deps install and

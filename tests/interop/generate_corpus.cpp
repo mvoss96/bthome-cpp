@@ -108,6 +108,13 @@ namespace
 
 } // namespace
 
+// Erases the per-id return type of a binary factory.
+template <auto Factory>
+static BTHome::Measurement as_measurement(bool on)
+{
+    return Factory(on);
+}
+
 int main()
 {
     // --- Scalar sensors: same representative values as tests/test_factories.cpp,
@@ -172,40 +179,43 @@ int main()
     sensor_case("settings_revision", BTHome::settings_revision(3), "settings_revision", 3, 0.5);
 
     // --- Binary sensors, both states each.
+    // Each factory has its own return type (Typed<Id> carries the object id),
+    // so they cannot share a function-pointer type; this adapter gives them
+    // one.
     struct BinaryEntry
     {
         const char *name;
         BTHome::Measurement (*factory)(bool);
     };
     const BinaryEntry binaries[] = {
-        {"generic_boolean", BTHome::generic_boolean},
-        {"power_state", BTHome::power_state},
-        {"opening", BTHome::opening},
-        {"battery_low", BTHome::battery_low},
-        {"battery_charging", BTHome::battery_charging},
-        {"carbon_monoxide", BTHome::carbon_monoxide},
-        {"cold", BTHome::cold},
-        {"connectivity", BTHome::connectivity},
-        {"door", BTHome::door},
-        {"garage_door", BTHome::garage_door},
-        {"gas_detected", BTHome::gas_detected},
-        {"heat", BTHome::heat},
-        {"light", BTHome::light},
-        {"lock", BTHome::lock},
-        {"moisture_detected", BTHome::moisture_detected},
-        {"motion", BTHome::motion},
-        {"moving", BTHome::moving},
-        {"occupancy", BTHome::occupancy},
-        {"plug", BTHome::plug},
-        {"presence", BTHome::presence},
-        {"problem", BTHome::problem},
-        {"running", BTHome::running},
-        {"safety", BTHome::safety},
-        {"smoke", BTHome::smoke},
-        {"sound", BTHome::sound},
-        {"tamper", BTHome::tamper},
-        {"vibration", BTHome::vibration},
-        {"window", BTHome::window},
+        {"generic_boolean", &as_measurement<BTHome::generic_boolean>},
+        {"power_state", &as_measurement<BTHome::power_state>},
+        {"opening", &as_measurement<BTHome::opening>},
+        {"battery_low", &as_measurement<BTHome::battery_low>},
+        {"battery_charging", &as_measurement<BTHome::battery_charging>},
+        {"carbon_monoxide", &as_measurement<BTHome::carbon_monoxide>},
+        {"cold", &as_measurement<BTHome::cold>},
+        {"connectivity", &as_measurement<BTHome::connectivity>},
+        {"door", &as_measurement<BTHome::door>},
+        {"garage_door", &as_measurement<BTHome::garage_door>},
+        {"gas_detected", &as_measurement<BTHome::gas_detected>},
+        {"heat", &as_measurement<BTHome::heat>},
+        {"light", &as_measurement<BTHome::light>},
+        {"lock", &as_measurement<BTHome::lock>},
+        {"moisture_detected", &as_measurement<BTHome::moisture_detected>},
+        {"motion", &as_measurement<BTHome::motion>},
+        {"moving", &as_measurement<BTHome::moving>},
+        {"occupancy", &as_measurement<BTHome::occupancy>},
+        {"plug", &as_measurement<BTHome::plug>},
+        {"presence", &as_measurement<BTHome::presence>},
+        {"problem", &as_measurement<BTHome::problem>},
+        {"running", &as_measurement<BTHome::running>},
+        {"safety", &as_measurement<BTHome::safety>},
+        {"smoke", &as_measurement<BTHome::smoke>},
+        {"sound", &as_measurement<BTHome::sound>},
+        {"tamper", &as_measurement<BTHome::tamper>},
+        {"vibration", &as_measurement<BTHome::vibration>},
+        {"window", &as_measurement<BTHome::window>},
     };
     for (const BinaryEntry &b : binaries)
     {
